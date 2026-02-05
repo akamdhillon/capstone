@@ -1,0 +1,34 @@
+# Core ML dependencies (pre-installed in L4T-ML image)
+# numpy>=1.21.0
+# opencv-python>=4.5.0
+# tensorrt (system package)
+
+# Web framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Additional ML utilities
+pillow>=10.0.0
+python-multipart>=0.0.6
+
+# Async HTTP client for RPI communication
+httpx>=0.25.0
+
+# Face Recognition (DeepFace)
+deepface>=0.0.79
+tf-keras>=2.15.0
+
+# Object Detection (YOLOv8)
+ultralytics>=8.0.0
+
+# Pose & Eye Tracking (MediaPipe)
+mediapipe>=0.10.0
+
+# Scientific computing for EAR calculations
+scipy>=1.11.0
+
+# ONNX Runtime (GPU version for fallback inference)
+# onnxruntime-gpu>=1.15.0  # Uncomment if TensorRT unavailable
+
