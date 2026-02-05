@@ -141,50 +141,307 @@ docker-compose down
 
 ---
 
-## Running on Raspberry Pi + Jetson Nano
+## Hardware Deployment Guide
 
-### Network Setup
+This section covers the complete setup process for deploying Clarity+ on the Raspberry Pi 4 and Jetson Nano hardware.
 
-1. Connect RPi and Jetson via Ethernet cable
-2. Configure static IPs:
-   - **RPi**: `192.168.10.1`
-   - **Jetson**: `192.168.10.2`
+---
 
-### Deploy on Raspberry Pi
+### Jetson Nano Setup
+
+The Jetson Nano runs all ML inference services (face recognition, skin analysis, posture detection, eye strain, and thermal).
+
+#### 1. Network Configuration
+
+Configure a static IP for the Ethernet interface to communicate with the Raspberry Pi.
 
 ```bash
-# SSH into RPi
-ssh pi@192.168.10.1
-
-# Clone repository and navigate
-cd ~/capstone
-
-# Update .env for production
-THERMAL_ENABLED=false
-DEV_MODE=false
-DOCKER_RUNTIME=runc
-
-# Start services
-docker-compose up -d api-gateway frontend-ui
+# Edit network configuration
+sudo nano /etc/network/interfaces
 ```
 
-### Deploy on Jetson Nano
+Add the following configuration:
+
+```
+auto eth0
+iface eth0 inet static
+    address 192.168.10.2
+    netmask 255.255.255.0
+    gateway 192.168.10.1
+```
+
+Alternatively, using NetworkManager:
 
 ```bash
-# SSH into Jetson
-ssh jetson@192.168.10.2
+# Create a static connection profile
+sudo nmcli con add type ethernet con-name clarity-bridge ifname eth0 \
+    ipv4.addresses 192.168.10.2/24 \
+    ipv4.gateway 192.168.10.1 \
+    ipv4.method manual
 
-# Clone repository and navigate
+# Activate the connection
+sudo nmcli con up clarity-bridge
+```
+
+Restart networking:
+
+```bash
+sudo systemctl restart networking
+# or
+sudo reboot
+```
+
+#### 2. Connect Ethernet to Raspberry Pi
+
+- Use a standard Cat5e or Cat6 Ethernet cable
+- Connect directly between Jetson and RPi (no switch needed)
+- Verify connection after RPi is configured:
+  ```bash
+  ping 192.168.10.1
+  ```
+
+#### 3. Clone the Repository
+
+```bash
+cd ~
+git clone https://github.com/yourusername/capstone.git
+cd capstone
+```
+
+#### 4. Set Up Python Environment
+
+```bash
+cd ~/capstone/jetson
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+#### 5. Configure Environment Variables
+
+```bash
 cd ~/capstone
+nano .env
+```
 
-# Update .env for production with GPU
+Set the following for production:
+
+```bash
 THERMAL_ENABLED=false
 DEV_MODE=false
 DOCKER_RUNTIME=nvidia
-
-# Start ML services with NVIDIA runtime
-DOCKER_RUNTIME=nvidia docker-compose up -d jetson-ml
+JETSON_IP=192.168.10.2
+RPI_IP=192.168.10.1
+CAMERA_DEVICE=/dev/video0
+MODEL_PRECISION=FP16
 ```
+
+#### 6. Run the ML Services
+
+**Option A: Without Docker (Direct Python)**
+
+```bash
+cd ~/capstone/jetson
+source venv/bin/activate
+python main.py
+```
+
+**Option B: With Docker (Recommended for Production)**
+
+```bash
+cd ~/capstone
+
+# Pull/build and run with NVIDIA runtime
+DOCKER_RUNTIME=nvidia docker-compose up -d jetson-ml
+
+# View logs
+docker-compose logs -f jetson-ml
+```
+
+#### 7. Verify Services Are Running
+
+```bash
+# Check all ML service health endpoints
+curl http://localhost:8001/health  # Face Recognition
+curl http://localhost:8002/health  # Skin Analysis
+curl http://localhost:8003/health  # Posture Detection
+curl http://localhost:8004/health  # Eye Strain
+curl http://localhost:8005/health  # Thermal
+```
+
+---
+
+### Raspberry Pi Setup
+
+The Raspberry Pi runs the backend API gateway, SQLite database, and serves the React frontend.
+
+#### 1. Network Configuration
+
+Configure a static IP for the Ethernet interface.
+
+```bash
+# Using dhcpcd (default on Raspberry Pi OS)
+sudo nano /etc/dhcpcd.conf
+```
+
+Add at the end of the file:
+
+```
+interface eth0
+static ip_address=192.168.10.1/24
+static routers=192.168.10.1
+```
+
+Restart networking:
+
+```bash
+sudo systemctl restart dhcpcd
+# or
+sudo reboot
+```
+
+#### 2. Connect Ethernet to Jetson Nano
+
+- Use a standard Cat5e or Cat6 Ethernet cable
+- Connect directly between RPi and Jetson
+- After reboot, verify connection:
+  ```bash
+  ping 192.168.10.2
+  ```
+
+#### 3. Clone the Repository
+
+```bash
+cd ~
+git clone https://github.com/yourusername/capstone.git
+cd capstone
+```
+
+#### 4. Set Up Backend (Python)
+
+```bash
+cd ~/capstone/backend
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+#### 5. Set Up Frontend (Node.js)
+
+Ensure Node.js 20+ is installed:
+
+```bash
+# Check Node version
+node --version
+
+# If not installed or outdated, install via NodeSource
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+Build the frontend:
+
+```bash
+cd ~/capstone/frontend
+
+# Install dependencies
+npm install
+
+# Build for production
+npm run build
+```
+
+#### 6. Configure Environment Variables
+
+```bash
+cd ~/capstone
+nano .env
+```
+
+Set the following for production:
+
+```bash
+THERMAL_ENABLED=false
+DEV_MODE=false
+DOCKER_RUNTIME=runc
+JETSON_IP=192.168.10.2
+RPI_IP=192.168.10.1
+LOG_LEVEL=INFO
+NODE_ENV=production
+```
+
+#### 7. Run the Backend API
+
+**Option A: Without Docker (Direct Python)**
+
+```bash
+cd ~/capstone/backend
+source venv/bin/activate
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+**Option B: With Docker (Recommended for Production)**
+
+```bash
+cd ~/capstone
+
+# Build and start backend + frontend containers
+docker-compose up -d api-gateway frontend-ui
+
+# View logs
+docker-compose logs -f api-gateway
+```
+
+#### 8. Serve the Frontend
+
+**Option A: Development server**
+
+```bash
+cd ~/capstone/frontend
+npm run dev -- --host 0.0.0.0
+```
+
+**Option B: Production (with nginx or Docker)**
+
+The Docker Compose setup serves the frontend at port 3000.
+
+#### 9. Verify Everything is Running
+
+```bash
+# Check backend API
+curl http://localhost:8000/health
+
+# Check frontend is accessible
+curl http://localhost:3000
+
+# Verify connection to Jetson ML services
+curl http://192.168.10.2:8001/health
+```
+
+---
+
+### Quick Deployment Checklist
+
+| Step | Jetson Nano | Raspberry Pi |
+|------|-------------|--------------|
+| 1. Configure static IP | `192.168.10.2` | `192.168.10.1` |
+| 2. Connect Ethernet | ← Cable → | ← Cable → |
+| 3. Clone repo | `git clone ...` | `git clone ...` |
+| 4. Setup venv | `python3 -m venv venv` | `python3 -m venv venv` |
+| 5. Install deps | `pip install -r requirements.txt` | `pip install -r requirements.txt` |
+| 6. Configure .env | `DOCKER_RUNTIME=nvidia` | `DOCKER_RUNTIME=runc` |
+| 7. Start services | `docker-compose up -d jetson-ml` | `docker-compose up -d api-gateway frontend-ui` |
+| 8. Verify health | `curl localhost:8001/health` | `curl localhost:8000/health` |
 
 ---
 

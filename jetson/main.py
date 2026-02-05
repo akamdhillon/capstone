@@ -128,6 +128,136 @@ async def thermal_health():
 
 
 # =============================================================================
+# DEBUG ENDPOINTS (For troubleshooting)
+# =============================================================================
+
+def get_debug_info():
+    """Get common debug information for all services."""
+    import platform
+    import sys
+    import os
+    from config import IS_MAC, IS_LINUX
+    
+    return {
+        "platform": {
+            "system": platform.system(),
+            "release": platform.release(),
+            "machine": platform.machine(),
+            "python_version": sys.version,
+            "is_mac": IS_MAC,
+            "is_linux": IS_LINUX
+        },
+        "settings": {
+            "dev_mode": settings.DEV_MODE,
+            "enable_thermal": settings.ENABLE_THERMAL,
+            "model_precision": settings.MODEL_PRECISION,
+            "host": settings.HOST,
+            "camera_primary": str(settings.camera_source_primary),
+            "camera_secondary": str(settings.camera_source_secondary),
+            "use_gstreamer": settings.USE_GSTREAMER,
+            "dev_video_path": settings.DEV_VIDEO_PATH if settings.DEV_MODE else None
+        },
+        "ports": {
+            "face_recognition": settings.FACE_RECOGNITION_PORT,
+            "skin_analysis": settings.SKIN_ANALYSIS_PORT,
+            "posture": settings.POSTURE_PORT,
+            "eye_strain": settings.EYE_STRAIN_PORT,
+            "thermal": settings.THERMAL_PORT
+        }
+    }
+
+
+@face_app.get("/debug")
+async def face_debug():
+    """Debug info for Face Recognition service."""
+    from services.camera import get_camera_manager
+    from routers.face import _service
+    
+    camera = get_camera_manager()
+    
+    return {
+        **get_debug_info(),
+        "service": "face_recognition",
+        "service_initialized": _service.is_initialized if _service else False,
+        "camera": {
+            "running": camera.is_running,
+            "width": camera.width,
+            "height": camera.height,
+            "fps": camera.fps
+        }
+    }
+
+
+@skin_app.get("/debug")
+async def skin_debug():
+    """Debug info for Skin Analysis service."""
+    from services.camera import get_camera_manager
+    from routers.skin import _service
+    
+    camera = get_camera_manager()
+    
+    return {
+        **get_debug_info(),
+        "service": "skin_analysis",
+        "service_initialized": _service.is_initialized if _service else False,
+        "using_tensorrt": _service._using_tensorrt if _service else False,
+        "camera": {
+            "running": camera.is_running
+        }
+    }
+
+
+@posture_app.get("/debug")
+async def posture_debug():
+    """Debug info for Posture service."""
+    from services.camera import get_camera_manager
+    from routers.posture import _service
+    
+    camera = get_camera_manager()
+    
+    return {
+        **get_debug_info(),
+        "service": "posture",
+        "service_initialized": _service.is_initialized if _service else False,
+        "camera": {
+            "running": camera.is_running
+        }
+    }
+
+
+@eye_app.get("/debug")
+async def eye_debug():
+    """Debug info for Eye Strain service."""
+    from services.camera import get_camera_manager
+    from routers.eyes import _service
+    
+    camera = get_camera_manager()
+    
+    return {
+        **get_debug_info(),
+        "service": "eye_strain",
+        "service_initialized": _service.is_initialized if _service else False,
+        "camera": {
+            "running": camera.is_running
+        }
+    }
+
+
+@thermal_app.get("/debug")
+async def thermal_debug():
+    """Debug info for Thermal service."""
+    from routers.thermal import _service
+    
+    return {
+        **get_debug_info(),
+        "service": "thermal",
+        "service_enabled": settings.ENABLE_THERMAL,
+        "service_initialized": _service.is_initialized if _service else False
+    }
+
+
+
+# =============================================================================
 # MULTI-SERVICE RUNNER
 # =============================================================================
 

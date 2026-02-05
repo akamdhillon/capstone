@@ -124,24 +124,24 @@ class JetsonClient:
         )
     
     async def get_skin_analysis(self) -> tuple[Optional[dict], Optional[str]]:
-        """Get skin analysis result."""
+        """Get skin analysis result from live camera feed."""
         return await self._make_request(
             port=self.settings.jetson_skin_port,
-            endpoint="/analyze"
+            endpoint="/analyze-live"
         )
     
     async def get_posture_analysis(self) -> tuple[Optional[dict], Optional[str]]:
-        """Get posture analysis result."""
+        """Get posture analysis result from live camera feed."""
         return await self._make_request(
             port=self.settings.jetson_posture_port,
-            endpoint="/analyze"
+            endpoint="/analyze-live"
         )
     
     async def get_eye_analysis(self) -> tuple[Optional[dict], Optional[str]]:
-        """Get eye strain analysis result."""
+        """Get eye strain analysis result from live camera feed."""
         return await self._make_request(
             port=self.settings.jetson_eye_port,
-            endpoint="/analyze"
+            endpoint="/analyze-live"
         )
     
     async def get_thermal_analysis(self) -> tuple[Optional[dict], Optional[str]]:
@@ -155,7 +155,7 @@ class JetsonClient:
         
         return await self._make_request(
             port=self.settings.jetson_thermal_port,
-            endpoint="/analyze"
+            endpoint="/read"
         )
     
     async def run_full_analysis(self, user_id: Optional[int] = None) -> MLResults:

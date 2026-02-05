@@ -275,3 +275,75 @@ async def check_jetson_health():
         "services": health,
         "thermal_enabled": settings.thermal_enabled
     }
+
+
+@router.get("/debug")
+async def debug_info():
+    """
+    Comprehensive debug endpoint for troubleshooting connectivity and configuration.
+    Returns system info, Jetson connectivity status, and current settings.
+    """
+    import platform
+    import sys
+    
+    client = JetsonClient()
+    
+    # Test connectivity to each Jetson service
+    connectivity = {}
+    errors = {}
+    
+    # Test each service individually with error details
+    services = [
+        ("face_recognition", settings.jetson_face_port, "/health"),
+        ("skin_analysis", settings.jetson_skin_port, "/health"),
+        ("posture", settings.jetson_posture_port, "/health"),
+        ("eye_strain", settings.jetson_eye_port, "/health"),
+        ("thermal", settings.jetson_thermal_port, "/health"),
+    ]
+    
+    import httpx
+    
+    for name, port, endpoint in services:
+        url = f"http://{settings.jetson_ip}:{port}{endpoint}"
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as http_client:
+                response = await http_client.get(url)
+                connectivity[name] = {
+                    "reachable": True,
+                    "status_code": response.status_code,
+                    "url": url
+                }
+        except httpx.ConnectError as e:
+            connectivity[name] = {"reachable": False, "url": url}
+            errors[name] = f"Connection refused - is Jetson running? ({str(e)})"
+        except httpx.TimeoutException:
+            connectivity[name] = {"reachable": False, "url": url}
+            errors[name] = f"Timeout - network unreachable or service not responding"
+        except Exception as e:
+            connectivity[name] = {"reachable": False, "url": url}
+            errors[name] = str(e)
+    
+    return {
+        "platform": {
+            "system": platform.system(),
+            "python_version": sys.version,
+        },
+        "configuration": {
+            "jetson_ip": settings.jetson_ip,
+            "rpi_ip": settings.rpi_ip,
+            "thermal_enabled": settings.thermal_enabled,
+            "dev_mode": settings.dev_mode,
+            "weights": settings.weights
+        },
+        "ports": {
+            "face_recognition": settings.jetson_face_port,
+            "skin_analysis": settings.jetson_skin_port,
+            "posture": settings.jetson_posture_port,
+            "eye_strain": settings.jetson_eye_port,
+            "thermal": settings.jetson_thermal_port
+        },
+        "jetson_connectivity": connectivity,
+        "errors": errors if errors else None,
+        "all_services_reachable": all(c.get("reachable", False) for c in connectivity.values())
+    }
+
