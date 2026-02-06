@@ -129,8 +129,22 @@ class CameraManager:
             logger.info(f"Opening primary camera: {primary_source}")
             self._primary_cap = self._open_camera(primary_source, use_gstreamer=settings.USE_GSTREAMER)
             
+            # Fallback: If GStreamer fails, try plain OpenCV with device path
+            if self._primary_cap is None and settings.USE_GSTREAMER:
+                logger.warning("GStreamer failed, trying plain OpenCV...")
+                self._primary_cap = self._open_camera(primary_source, use_gstreamer=False)
+            
+            # Fallback: If device path fails, try camera index 0
+            if self._primary_cap is None and isinstance(primary_source, str):
+                logger.warning("Device path failed, trying camera index 0...")
+                self._primary_cap = self._open_camera(0, use_gstreamer=False)
+            
             logger.info(f"Opening secondary camera: {secondary_source}")
             self._secondary_cap = self._open_camera(secondary_source, use_gstreamer=settings.USE_GSTREAMER)
+            
+            # Fallback for secondary camera too
+            if self._secondary_cap is None and settings.USE_GSTREAMER:
+                self._secondary_cap = self._open_camera(secondary_source, use_gstreamer=False)
         
         if self._primary_cap is None:
             logger.error("Failed to initialize primary camera")
