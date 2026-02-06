@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-from config import get_settings
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class WellnessScoringEngine:
     """
     
     def __init__(self):
-        self.settings = get_settings()
+        self.settings = settings
         self._weights = self.settings.weights
     
     @property
@@ -45,7 +45,7 @@ class WellnessScoringEngine:
     @property
     def thermal_enabled(self) -> bool:
         """Whether thermal hardware is connected."""
-        return self.settings.thermal_enabled
+        return self.settings.THERMAL_ENABLED
     
     def calculate(
         self,

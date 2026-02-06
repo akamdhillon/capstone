@@ -12,13 +12,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from config import get_settings
+from config import settings
 from routes import analysis
 
 # Configure logging
-settings = get_settings()
+# settings = get_settings() # Removed, imported directly
 logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper()),
+    level=getattr(logging, settings.LOG_LEVEL.upper()),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
     """
     logger.info("🚀 Starting Clarity+ Backend...")
     
-    logger.info(f"✓ Thermal hardware: {'ENABLED' if settings.thermal_enabled else 'DISABLED'}")
+    logger.info(f"✓ Thermal hardware: {'ENABLED' if settings.THERMAL_ENABLED else 'DISABLED'}")
     logger.info(f"✓ Scoring weights: {settings.weights}")
     
     yield
@@ -53,7 +53,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        f"http://{settings.rpi_ip}:3000"
+        f"http://{settings.RPI_IP}:3000"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -70,7 +70,7 @@ async def health_check():
     return {
         "status": "ok",
         "service": "clarity-backend",
-        "thermal_enabled": settings.thermal_enabled
+        "thermal_enabled": settings.THERMAL_ENABLED
     }
 
 
@@ -82,3 +82,8 @@ async def root():
         "docs": "/docs",
         "health": "/health"
     }
+
+if __name__ == "__main__":
+    import uvicorn
+    # Run the server with default host 0.0.0.0 to allow external access
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

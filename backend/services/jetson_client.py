@@ -13,7 +13,7 @@ from typing import Optional, Dict
 
 import httpx
 
-from config import get_settings
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +49,8 @@ class JetsonClient:
     """
     
     def __init__(self):
-        self.settings = get_settings()
-        self.base_url = f"http://{self.settings.jetson_ip}:{JETSON_PORT}"
+        self.settings = settings
+        self.base_url = f"http://{self.settings.JETSON_IP}:{JETSON_PORT}"
     
     async def _make_request(
         self,

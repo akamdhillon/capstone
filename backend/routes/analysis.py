@@ -11,7 +11,7 @@ from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Query
 
-from config import get_settings
+from config import settings
 from models import AnalysisRequest, AnalysisResult
 from services.wellness import WellnessService
 from services.jetson_client import JetsonClient
@@ -19,7 +19,7 @@ from services.wellness_scoring import WellnessScoringEngine
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-settings = get_settings()
+# settings = get_settings() # Removed, imported directly
 
 
 @router.post("/analyze", response_model=AnalysisResult)
@@ -48,7 +48,7 @@ async def check_jetson_health():
     return {
         "status": "ok" if all_healthy else "degraded",
         "services": health,
-        "thermal_enabled": settings.thermal_enabled
+        "thermal_enabled": settings.THERMAL_ENABLED
     }
 
 
@@ -68,15 +68,15 @@ async def debug_info():
     errors = {}
     
     services = [
-        ("face_recognition", settings.jetson_face_port, "/health"),
-        ("skin_analysis", settings.jetson_skin_port, "/health"),
-        ("posture", settings.jetson_posture_port, "/health"),
-        ("eye_strain", settings.jetson_eye_port, "/health"),
-        ("thermal", settings.jetson_thermal_port, "/health"),
+        ("face_recognition", settings.JETSON_FACE_PORT, "/health"),
+        ("skin_analysis", settings.JETSON_SKIN_PORT, "/health"),
+        ("posture", settings.JETSON_POSTURE_PORT, "/health"),
+        ("eye_strain", settings.JETSON_EYE_PORT, "/health"),
+        ("thermal", settings.JETSON_THERMAL_PORT, "/health"),
     ]
     
     for name, port, endpoint in services:
-        url = f"http://{settings.jetson_ip}:{port}{endpoint}"
+        url = f"http://{settings.JETSON_IP}:{port}{endpoint}"
         try:
             async with httpx.AsyncClient(timeout=3.0) as http_client:
                 response = await http_client.get(url)
@@ -88,8 +88,8 @@ async def debug_info():
     return {
         "platform": {"system": platform.system(), "python_version": sys.version},
         "configuration": {
-            "jetson_ip": settings.jetson_ip,
-            "rpi_ip": settings.rpi_ip,
+            "jetson_ip": settings.JETSON_IP,
+            "rpi_ip": settings.RPI_IP,
             "weights": settings.weights
         },
         "connectivity": connectivity,
