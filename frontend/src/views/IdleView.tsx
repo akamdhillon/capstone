@@ -1,5 +1,5 @@
 import { Clock } from '../components/Clock';
-import { DevPanel } from '../components/DevPanel';
+// import { DevPanel } from '../components/DevPanel'; // Removed as requested
 import { useApp } from '../context/AppContext';
 
 export function IdleView() {
@@ -36,7 +36,7 @@ export function IdleView() {
             </button>
 
             {/* Dev Panel - Debug capture button */}
-            <DevPanel />
+            {/* <DevPanel /> */}
         </div>
     );
 }

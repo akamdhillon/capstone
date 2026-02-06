@@ -11,19 +11,31 @@ export function DevPanel() {
     const [error, setError] = useState<string | null>(null);
     const [isExpanded, setIsExpanded] = useState(false);
 
-    const handleDevCapture = async () => {
+    // Debug logging for state changes
+    // console.log(`DevPanel Render: isLoading=${isLoading}, result=${result ? 'YES' : 'NO'}, error=${error}`);
+
+    const handleDevCapture = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        console.log('DevPanel: Starting capture...');
         setIsLoading(true);
         setError(null);
         setResult(null);
 
         try {
+            console.log('DevPanel: Calling triggerDebugAnalysis...');
             const analysisResult = await triggerDebugAnalysis();
+
+            // Log success but DO NOT log the full object with base64 image
+            console.log('DevPanel: Got result (success)');
+
             setResult(analysisResult);
             setIsExpanded(true);
         } catch (err) {
+            console.error('DevPanel: Error during capture', err);
             setError(err instanceof Error ? err.message : 'Unknown error');
             setIsExpanded(true);
         } finally {
+            console.log('DevPanel: Setting isLoading false');
             setIsLoading(false);
         }
     };
@@ -93,13 +105,23 @@ export function DevPanel() {
                             {/* Captured image */}
                             {result.captured_image && (
                                 <div className="rounded-lg overflow-hidden border border-white/20">
+                                    <p className="text-xs text-gray-400 mb-1">Image size: {result.captured_image.length} chars</p>
                                     <img
                                         src={`data:image/jpeg;base64,${result.captured_image}`}
                                         alt="Captured from Jetson camera"
                                         className="w-full h-auto"
+                                        onError={(e) => console.error('Image load error', e)}
                                     />
                                 </div>
                             )}
+
+                            {/* Disabled debug placeholder 
+                            {result.captured_image && (
+                                <div className="p-2 bg-gray-800 rounded border border-gray-600">
+                                    <p className="text-xs text-green-400">Image captured ({result.captured_image.length} bytes) - Rendering disabled</p>
+                                </div>
+                            )}
+                            */}
 
                             {/* Overall score */}
                             <div className="bg-white/5 rounded-lg p-3">

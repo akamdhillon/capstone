@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { triggerAnalysis } from '../services/api';
+import { triggerAnalysis, triggerDebugAnalysis } from '../services/api'; // Import debug trigger
 import { WellnessScore } from '../components/WellnessScore';
 import { MetricCard } from '../components/MetricCard';
 import { GlassCard } from '../components/ui/GlassCard';
@@ -13,13 +13,12 @@ export function AnalysisView() {
     // Perform analysis on mount
     useEffect(() => {
         const performAnalysis = async () => {
-            if (!currentUser) return;
-
-            setIsLoading(true);
-            setError(null);
-
             try {
-                const result = await triggerAnalysis(currentUser.id);
+                // Use debug analysis for now to bypass user requirement & ensure same results as DevPanel
+                // const result = await triggerAnalysis(currentUser.id);
+                const result = await triggerDebugAnalysis();
+
+                // Map debug result to expected format if needed, but they are similar
                 setScores(
                     result.scores,
                     result.overall_score,
@@ -41,8 +40,9 @@ export function AnalysisView() {
     useEffect(() => {
         if (!isLoading && !error) {
             const timer = setTimeout(() => {
-                setView('idle');
-                setScores(null, null, null);
+                // setView('idle');
+                // setScores(null, null, null);
+                // DISABLED auto-return for debugging so user can see results
             }, 60000);
             return () => clearTimeout(timer);
         }

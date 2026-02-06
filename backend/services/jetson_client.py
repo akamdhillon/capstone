@@ -18,7 +18,7 @@ from config import get_settings
 logger = logging.getLogger(__name__)
 
 # Request timeout in seconds (Orchestrator needs more time to run all models)
-REQUEST_TIMEOUT = 10.0
+REQUEST_TIMEOUT = 30.0
 # Unified Port (should match Jetson main.py)
 JETSON_PORT = 8001
 
