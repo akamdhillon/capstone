@@ -347,3 +347,54 @@ async def debug_info():
         "all_services_reachable": all(c.get("reachable", False) for c in connectivity.values())
     }
 
+
+@router.post("/debug/analyze")
+async def debug_analyze():
+    """
+    Debug analysis endpoint - triggers Jetson ML analysis without user authentication.
+    
+    This endpoint:
+    - Does NOT require a user_id
+    - Does NOT store results in database
+    - Returns raw ML results with full debug information
+    
+    Useful for testing camera capture and ML pipeline from the frontend.
+    """
+    import time
+    start_time = time.time()
+    
+    client = JetsonClient()
+    ml_results = await client.run_full_analysis()
+    
+    # Calculate wellness score
+    engine = WellnessScoringEngine()
+    overall_score, weights_used = engine.calculate(
+        skin_score=ml_results.skin_score,
+        posture_score=ml_results.posture_score,
+        eye_score=ml_results.eye_score,
+        thermal_score=ml_results.thermal_score
+    )
+    
+    elapsed_ms = (time.time() - start_time) * 1000
+    
+    logger.info(f"Debug analysis completed: overall={overall_score}, elapsed={elapsed_ms:.0f}ms")
+    
+    return {
+        "success": len(ml_results.errors) == 0,
+        "scores": {
+            "skin": ml_results.skin_score,
+            "posture": ml_results.posture_score,
+            "eyes": ml_results.eye_score,
+            "thermal": ml_results.thermal_score
+        },
+        "overall_score": overall_score,
+        "weights_used": weights_used,
+        "details": {
+            "skin": ml_results.skin_details,
+            "posture": ml_results.posture_details,
+            "eyes": ml_results.eye_details,
+            "thermal": ml_results.thermal_details
+        },
+        "errors": ml_results.errors,
+        "timing_ms": elapsed_ms
+    }

@@ -139,8 +139,12 @@ async def analyze_from_camera(camera: str = "primary"):
         service = get_service()
         result = service.analyze(frame)
         
+        # Map posture_score to "score" for backend compatibility
+        score = result.get("posture_score", None)
+        
         result["camera"] = camera
         result["timestamp"] = timestamp
+        result["score"] = score
         
         return result
         

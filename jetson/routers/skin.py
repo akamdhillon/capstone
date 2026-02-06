@@ -137,8 +137,14 @@ async def analyze_from_camera(
         service = get_service()
         result = service.analyze(frame, confidence_threshold=confidence)
         
+        # Calculate score: Higher = better skin health
+        # Invert severity: 0 severity = 100 score
+        severity = result.get("summary", {}).get("severity_score", 0)
+        score = max(0, 100 - severity)
+        
         return {
             "success": "error" not in result,
+            "score": score,
             "detections": result.get("detections", []),
             "summary": result.get("summary", {}),
             "count": result.get("count", 0),

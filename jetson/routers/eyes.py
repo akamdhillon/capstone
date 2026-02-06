@@ -135,8 +135,15 @@ async def analyze_from_camera(camera: str = "primary"):
         service = get_service()
         result = service.analyze(frame)
         
+        # Calculate score: Convert strain_score to wellness score
+        # strain_score is 0-100 where 100 = max strain
+        # Invert it: 100 - strain = eye health score
+        strain_score = result.get("strain_score", 0)
+        score = max(0, 100 - strain_score)
+        
         result["camera"] = camera
         result["timestamp"] = timestamp
+        result["score"] = score
         
         return result
         

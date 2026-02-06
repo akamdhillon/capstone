@@ -1,5 +1,5 @@
-import React from 'react';
 import { Clock } from '../components/Clock';
+import { DevPanel } from '../components/DevPanel';
 import { useApp } from '../context/AppContext';
 
 export function IdleView() {
@@ -34,6 +34,10 @@ export function IdleView() {
             >
                 New user? Tap to enroll
             </button>
+
+            {/* Dev Panel - Debug capture button */}
+            <DevPanel />
         </div>
     );
 }
+
