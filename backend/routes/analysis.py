@@ -389,6 +389,7 @@ async def debug_analyze():
         },
         "overall_score": overall_score,
         "weights_used": weights_used,
+        "captured_image": ml_results.skin_details.get("image") if ml_results.skin_details else None,
         "details": {
             "skin": ml_results.skin_details,
             "posture": ml_results.posture_details,

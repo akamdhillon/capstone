@@ -31,8 +31,8 @@ class Settings(BaseSettings):
         description="Enable thermal sensor endpoint (Port 8005). Ghost service returns null when disabled."
     )
     DEV_MODE: bool = Field(
-        default=True,
-        description="When True, use video file instead of physical cameras."
+        default=False,
+        description=\"When True, use video file instead of physical cameras.\"
     )
     
     # -------------------------------------------------------------------------

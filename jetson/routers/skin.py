@@ -5,8 +5,10 @@ Endpoints for YOLOv8-based skin condition detection.
 """
 
 import logging
+import base64
 from typing import Optional
 
+import cv2
 import numpy as np
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
@@ -119,6 +121,7 @@ async def analyze_from_camera(
 ):
     """
     Analyze skin conditions from live camera feed.
+    Returns analysis results plus the captured frame as base64 JPEG.
     """
     try:
         camera_manager = get_camera_manager()
@@ -142,9 +145,14 @@ async def analyze_from_camera(
         severity = result.get("summary", {}).get("severity_score", 0)
         score = max(0, 100 - severity)
         
+        # Encode frame as base64 JPEG for frontend display
+        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        image_base64 = base64.b64encode(buffer).decode('utf-8')
+        
         return {
             "success": "error" not in result,
             "score": score,
+            "image": image_base64,
             "detections": result.get("detections", []),
             "summary": result.get("summary", {}),
             "count": result.get("count", 0),

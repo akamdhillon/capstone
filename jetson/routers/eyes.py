@@ -5,8 +5,10 @@ Endpoints for blink rate and eye redness analysis.
 """
 
 import logging
+import base64
 from typing import Optional
 
+import cv2
 import numpy as np
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
@@ -141,9 +143,14 @@ async def analyze_from_camera(camera: str = "primary"):
         strain_score = result.get("strain_score", 0)
         score = max(0, 100 - strain_score)
         
+        # Encode frame as base64 JPEG for frontend display
+        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        image_base64 = base64.b64encode(buffer).decode('utf-8')
+        
         result["camera"] = camera
         result["timestamp"] = timestamp
         result["score"] = score
+        result["image"] = image_base64
         
         return result
         

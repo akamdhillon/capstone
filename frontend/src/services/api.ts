@@ -89,6 +89,7 @@ export interface DebugAnalysisResult {
         thermal: number | null;
     };
     overall_score: number | null;
+    captured_image: string | null;
     details: {
         skin: Record<string, unknown> | null;
         posture: Record<string, unknown> | null;

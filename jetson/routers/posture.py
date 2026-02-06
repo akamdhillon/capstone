@@ -5,8 +5,10 @@ Endpoints for MediaPipe Pose-based posture analysis.
 """
 
 import logging
+import base64
 from typing import Optional
 
+import cv2
 import numpy as np
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
@@ -142,9 +144,14 @@ async def analyze_from_camera(camera: str = "primary"):
         # Map posture_score to "score" for backend compatibility
         score = result.get("posture_score", None)
         
+        # Encode frame as base64 JPEG for frontend display
+        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        image_base64 = base64.b64encode(buffer).decode('utf-8')
+        
         result["camera"] = camera
         result["timestamp"] = timestamp
         result["score"] = score
+        result["image"] = image_base64
         
         return result
         

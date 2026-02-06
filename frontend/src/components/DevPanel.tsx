@@ -90,6 +90,17 @@ export function DevPanel() {
                     {/* Results display */}
                     {result && (
                         <div className="space-y-3">
+                            {/* Captured image */}
+                            {result.captured_image && (
+                                <div className="rounded-lg overflow-hidden border border-white/20">
+                                    <img
+                                        src={`data:image/jpeg;base64,${result.captured_image}`}
+                                        alt="Captured from Jetson camera"
+                                        className="w-full h-auto"
+                                    />
+                                </div>
+                            )}
+
                             {/* Overall score */}
                             <div className="bg-white/5 rounded-lg p-3">
                                 <div className="flex items-center justify-between">
