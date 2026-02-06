@@ -183,10 +183,20 @@ async def analyze_endpoint(file: UploadFile = File(None)):
             logger.error(f"Failed to call {name}: {e}")
             results[name] = {"error": str(e)}
 
+    # 3. Prepare Response (include image as base64)
+    import base64
+    image_b64 = None
+    try:
+        with open(filepath, "rb") as img_file:
+            image_b64 = base64.b64encode(img_file.read()).decode('utf-8')
+    except Exception as e:
+        logger.error(f"Failed to encode image: {e}")
+
     return {
         "success": True,
         "timestamp": timestamp,
         "image_path": filepath,
+        "image": image_b64,
         "results": results
     }
 

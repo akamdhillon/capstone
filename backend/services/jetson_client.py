@@ -34,6 +34,7 @@ class MLResults:
     posture_details: Optional[dict] = None
     eye_details: Optional[dict] = None
     thermal_details: Optional[dict] = None
+    captured_image: Optional[str] = None
     errors: list[str] = None
     
     def __post_init__(self):
@@ -96,7 +97,7 @@ class JetsonClient:
         
         The Jetson Orchestrator handles image capture and all inference locally.
         """
-        endpoint = "/analyze-all"
+        endpoint = "/analyze"  # Updated to match Jetson Orchestrator
         payload = {
             "user_id": user_id,
             "include_image": True,
@@ -118,23 +119,31 @@ class JetsonClient:
             if not server_errors:
                  results.errors.append("Unknown orchestrator failure")
         
-        # Parse Aggregated Scores
-        scores = data.get("scores", {})
-        results.skin_score = scores.get("skin")
-        results.posture_score = scores.get("posture")
-        results.eye_score = scores.get("eyes")
-        results.thermal_score = scores.get("thermal")
+        # Parse Aggregated Scores (Jetson returns results in 'results' dict, need to parse)
+        # Structure from Jetson: {"results": {"skin": {...}, ...}, "image": "..."}
+        raw_results = data.get("results", {})
+        
+        # Example helper to safely get score
+        def get_score(service_name):
+            svc_data = raw_results.get(service_name, {})
+            if "error" in svc_data:
+                results.errors.append(f"{service_name}: {svc_data['error']}")
+                return None
+            return svc_data.get("score") # Assuming each service returns a 'score' field
+
+        results.skin_score = get_score("skin")
+        results.posture_score = get_score("posture")
+        results.eye_score = get_score("eyes")
+        results.thermal_score = get_score("thermal")
         
         # Parse Details
-        # The orchestrator returns 'face', 'skin', 'posture', ...
-        results.skin_details = data.get("skin")
-        results.posture_details = data.get("posture")
-        results.eye_details = data.get("eyes")
-        results.thermal_details = data.get("thermal")
+        results.skin_details = raw_results.get("skin")
+        results.posture_details = raw_results.get("posture")
+        results.eye_details = raw_results.get("eyes")
+        results.thermal_details = raw_results.get("thermal")
         
-        # Add image to details if present (hack for frontend compatibility)
-        if data.get("image") and results.skin_details:
-             results.skin_details["image"] = data.get("image")
+        # Parse Image
+        results.captured_image = data.get("image")
         
         logger.info(
             f"Analysis complete: skin={results.skin_score}, "

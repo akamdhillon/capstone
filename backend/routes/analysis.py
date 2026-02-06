@@ -128,6 +128,7 @@ async def debug_analyze():
             "thermal": ml_results.thermal_score
         },
         "overall_score": overall_score,
+        "captured_image": ml_results.captured_image,
         "details": {
             "skin": ml_results.skin_details,
             "posture": ml_results.posture_details,
