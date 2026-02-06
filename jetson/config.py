@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     )
     DEV_MODE: bool = Field(
         default=False,
-        description=\"When True, use video file instead of physical cameras.\"
+        description="When True, use video file instead of physical cameras."
     )
     
     # -------------------------------------------------------------------------
