@@ -202,4 +202,4 @@ async def analyze_endpoint(file: UploadFile = File(None)):
 
 if __name__ == "__main__":
     # Run the Orchestrator on Port 8001
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="192.168.10.2", port=8001)
