@@ -53,7 +53,6 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "http://192.168.10.1:3000",
         f"http://{settings.rpi_ip}:3000"
     ],
     allow_credentials=True,

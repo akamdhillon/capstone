@@ -9,8 +9,8 @@ load_dotenv(dotenv_path=env_path)
 
 class Settings:
     # Network
-    JETSON_IP = os.getenv("JETSON_IP", "192.168.10.2")
-    RPI_IP = os.getenv("RPI_IP", "192.168.10.1")
+    JETSON_IP = os.getenv("JETSON_IP", "192.168.2.2")
+    RPI_IP = os.getenv("RPI_IP", "192.168.2.1")
     
     # Camera defaults (can be overridden by env if needed, but keeping simple for now)
     CAMERA_RESOLUTION_WIDTH = 1920

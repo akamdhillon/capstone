@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     # Network Configuration
-    jetson_ip: str = Field(default="192.168.10.2", alias="JETSON_IP")
-    rpi_ip: str = Field(default="192.168.10.1", alias="RPI_IP")
+    jetson_ip: str = Field(default="192.168.2.2", alias="JETSON_IP")
+    rpi_ip: str = Field(default="192.168.2.1", alias="RPI_IP")
     
     # Database
     database_url: str = Field(

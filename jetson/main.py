@@ -158,16 +158,16 @@ async def analyze_endpoint(file: UploadFile = File(None)):
         url = f"http://localhost:{port}/analyze"
         payload = {"image_path": filepath}
         
-        try:
-            # Short timeout since these are local
-            resp = requests.post(url, json=payload, timeout=2)
-            if resp.status_code == 200:
-                results[name] = resp.json()
-            else:
-                results[name] = {"error": f"Status {resp.status_code}"}
-        except Exception as e:
-            logger.error(f"Failed to call {name}: {e}")
-            results[name] = {"error": str(e)}
+        # try:
+        #     # Short timeout since these are local
+        #     resp = requests.post(url, json=payload, timeout=2)
+        #     if resp.status_code == 200:
+        #         results[name] = resp.json()
+        #     else:
+        #         results[name] = {"error": f"Status {resp.status_code}"}
+        # except Exception as e:
+        #     logger.error(f"Failed to call {name}: {e}")
+        #     results[name] = {"error": str(e)}
 
     # 3. Prepare Response (include image as base64)
     import base64
