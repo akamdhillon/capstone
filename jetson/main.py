@@ -146,6 +146,9 @@ async def analyze_endpoint(file: UploadFile = File(None)):
     If file is provided, uses that.
     If no file provided, captures from live camera.
     """
+
+    logger.info("Received analyze request")
+
     timestamp = int(time.time())
     filename = f"snapshot_{timestamp}.jpg"
     filepath = os.path.join(SNAPSHOT_DIR, filename)
