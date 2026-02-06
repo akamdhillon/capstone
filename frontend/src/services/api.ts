@@ -15,6 +15,7 @@ export interface AnalysisResult {
     scores: AnalysisScores;
     overall_score: number;
     weights_used: Record<string, number>;
+    captured_image?: string;
 }
 
 export interface User {

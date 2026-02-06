@@ -19,24 +19,7 @@ from typing import Optional
 import numpy as np
 
 # --- Camera Manager ---
-try:
-    from config import settings, IS_MAC
-except ImportError:
-    class Settings:
-        CAMERA_RESOLUTION_WIDTH = 1920
-        CAMERA_RESOLUTION_HEIGHT = 1080
-        CAMERA_FPS = 30
-        MAC_CAMERA_INDEX = 0
-        CAMERA_DEVICE_PRIMARY = 0
-        USE_GSTREAMER = False
-        DEV_MODE = False
-        DEV_VIDEO_PATH = "video.mp4"
-        camera_source_primary = 0
-        camera_source_secondary = 1
-    
-    settings = Settings()
-    import platform
-    IS_MAC = platform.system() == "Darwin"
+from config import settings, IS_MAC
 
 logger_cam = logging.getLogger("camera")
 
@@ -205,4 +188,4 @@ async def analyze_endpoint(file: UploadFile = File(None)):
 
 if __name__ == "__main__":
     # Run the Orchestrator on Port 8001
-    uvicorn.run(app, host="192.168.10.2", port=8001)
+    uvicorn.run(app, host=settings.JETSON_IP, port=8001)

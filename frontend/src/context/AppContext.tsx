@@ -17,7 +17,8 @@ interface AppState {
     // Analysis scores
     scores: AnalysisScores | null;
     overallScore: number | null;
-    setScores: (scores: AnalysisScores | null, overall: number | null) => void;
+    capturedImage: string | null;
+    setScores: (scores: AnalysisScores | null, overall: number | null, image?: string | null) => void;
 
     // Loading state
     isAnalyzing: boolean;
@@ -37,6 +38,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [scores, setScoresState] = useState<AnalysisScores | null>(null);
     const [overallScore, setOverallScore] = useState<number | null>(null);
+    const [capturedImage, setCapturedImage] = useState<string | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -45,9 +47,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setError(null);
     }, []);
 
-    const setScores = useCallback((newScores: AnalysisScores | null, overall: number | null) => {
+    const setScores = useCallback((newScores: AnalysisScores | null, overall: number | null, image: string | null = null) => {
         setScoresState(newScores);
         setOverallScore(overall);
+        setCapturedImage(image);
     }, []);
 
     const value: AppState = {
@@ -57,6 +60,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCurrentUser,
         scores,
         overallScore,
+        capturedImage,
         setScores,
         isAnalyzing,
         setIsAnalyzing,

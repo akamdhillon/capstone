@@ -17,6 +17,7 @@ class AnalysisResult(BaseModel):
     scores: AnalysisScores
     overall_score: float
     weights_used: Dict[str, float]
+    captured_image: Optional[str] = None
 
 class AnalysisHistory(BaseModel):
     id: int

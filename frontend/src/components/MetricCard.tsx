@@ -7,9 +7,10 @@ interface MetricCardProps {
     icon: string;
     detail?: string;
     className?: string;
+    disabled?: boolean;
 }
 
-export function MetricCard({ label, score, icon, detail, className = '' }: MetricCardProps) {
+export function MetricCard({ label, score, icon, detail, className = '', disabled = false }: MetricCardProps) {
     const getScoreColor = (score: number | null) => {
         if (score === null) return 'text-white/40';
         if (score >= 80) return 'text-green-400';
@@ -29,7 +30,7 @@ export function MetricCard({ label, score, icon, detail, className = '' }: Metri
     };
 
     return (
-        <GlassCard className={`animate-fade-in ${className}`} subtle>
+        <GlassCard className={`animate-fade-in ${className} ${disabled ? 'opacity-40 grayscale' : ''}`} subtle>
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <span className="text-3xl">{icon}</span>

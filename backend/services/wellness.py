@@ -46,5 +46,6 @@ class WellnessService:
                 thermal=ml_results.thermal_score
             ),
             overall_score=overall_score,
-            weights_used=weights_used
+            weights_used=weights_used,
+            captured_image=ml_results.captured_image
         )

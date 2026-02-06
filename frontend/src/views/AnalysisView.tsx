@@ -1,56 +1,56 @@
 import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { triggerAnalysis } from '../services/api';
 import { WellnessScore } from '../components/WellnessScore';
 import { MetricCard } from '../components/MetricCard';
 import { GlassCard } from '../components/ui/GlassCard';
 
 export function AnalysisView() {
-    const { setView, scores, overallScore, setScores, currentUser } = useApp();
+    const { setView, scores, overallScore, capturedImage, setScores, currentUser } = useApp();
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    // Simulate analysis on mount (in production, this calls the backend)
+    // Perform analysis on mount
     useEffect(() => {
         const performAnalysis = async () => {
+            if (!currentUser) return;
+
             setIsLoading(true);
+            setError(null);
 
-            // Simulate API delay
-            await new Promise((resolve) => setTimeout(resolve, 1500));
-
-            // Demo scores (in production, these come from the backend)
-            const demoScores = {
-                skin: 72 + Math.random() * 20,
-                posture: 65 + Math.random() * 25,
-                eyes: 58 + Math.random() * 30,
-                thermal: null, // Disabled
-            };
-
-            // Calculate overall (weighted without thermal)
-            const overall =
-                demoScores.skin * 0.4 +
-                demoScores.posture * 0.35 +
-                demoScores.eyes * 0.25;
-
-            setScores(demoScores, overall);
-            setIsLoading(false);
+            try {
+                const result = await triggerAnalysis(currentUser.id);
+                setScores(
+                    result.scores,
+                    result.overall_score,
+                    result.captured_image
+                );
+            } catch (err) {
+                console.error("Analysis failed:", err);
+                setError("Failed to analyze. Check connection.");
+                // Optional: set a fallback timeout to go back to idle if it fails hard
+            } finally {
+                setIsLoading(false);
+            }
         };
 
         performAnalysis();
-    }, [setScores]);
+    }, [currentUser, setScores]);
 
-    // Auto-return to idle after 30 seconds
+    // Auto-return to idle after 60 seconds
     useEffect(() => {
-        if (!isLoading) {
+        if (!isLoading && !error) {
             const timer = setTimeout(() => {
                 setView('idle');
-                setScores(null, null);
-            }, 30000);
+                setScores(null, null, null);
+            }, 60000);
             return () => clearTimeout(timer);
         }
-    }, [isLoading, setView, setScores]);
+    }, [isLoading, error, setView, setScores]);
 
     const handleClose = () => {
         setView('idle');
-        setScores(null, null);
+        setScores(null, null, null);
     };
 
     return (
@@ -59,50 +59,87 @@ export function AnalysisView() {
                 // Loading state
                 <div className="flex flex-col items-center animate-fade-in">
                     <div className="w-20 h-20 border-4 border-white/20 border-t-cyan-400 rounded-full animate-spin mb-6" />
-                    <p className="text-white/60 text-lg">Analyzing...</p>
+                    <p className="text-white/60 text-lg">Analyzing Wellness...</p>
+                </div>
+            ) : error ? (
+                // Error state
+                <div className="flex flex-col items-center animate-fade-in text-center">
+                    <div className="text-red-400 text-xl font-medium mb-4">{error}</div>
+                    <button
+                        onClick={handleClose}
+                        className="px-6 py-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+                    >
+                        Return Home
+                    </button>
                 </div>
             ) : (
                 // Results
-                <div className="flex flex-col items-center w-full max-w-md animate-fade-in">
-                    {/* User greeting */}
-                    {currentUser && (
-                        <p className="text-white/50 text-lg mb-4">
-                            Hello, {currentUser.name}
-                        </p>
-                    )}
+                <div className="flex flex-row gap-8 w-full max-w-5xl animate-fade-in items-start justify-center">
 
-                    {/* Main score */}
-                    <WellnessScore score={overallScore ?? 0} className="mb-10" />
+                    {/* Left Column: Image & Score */}
+                    <div className="flex flex-col items-center gap-6">
+                        {capturedImage && (
+                            <GlassCard className="p-2 rounded-2xl border-white/10 overflow-hidden">
+                                <img
+                                    src={`data:image/jpeg;base64,${capturedImage}`}
+                                    alt="Analysis Capture"
+                                    className="w-80 h-auto rounded-xl shadow-2xl"
+                                />
+                            </GlassCard>
+                        )}
 
-                    {/* Metric cards */}
-                    <div className="w-full space-y-3">
-                        <MetricCard
-                            label="Skin Health"
-                            score={scores?.skin ?? null}
-                            icon="✨"
-                            detail="Hydration & clarity"
-                        />
-                        <MetricCard
-                            label="Posture"
-                            score={scores?.posture ?? null}
-                            icon="🧘"
-                            detail="Alignment check"
-                        />
-                        <MetricCard
-                            label="Eye Strain"
-                            score={scores?.eyes ?? null}
-                            icon="👁️"
-                            detail="Blink rate & fatigue"
-                        />
+                        <div className="flex flex-col items-center">
+                            <span className="text-white/40 text-sm mb-2 uppercase tracking-widest">Wellness Score</span>
+                            <WellnessScore score={overallScore ?? 0} size={300} />
+                        </div>
                     </div>
 
-                    {/* Close button */}
-                    <button
-                        onClick={handleClose}
-                        className="mt-8 text-white/40 hover:text-white/60 transition-colors text-sm"
-                    >
-                        Tap anywhere to dismiss
-                    </button>
+                    {/* Right Column: Metrics */}
+                    <div className="flex flex-col w-full max-w-md">
+                        {currentUser && (
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-light text-white">
+                                    Hello, <span className="font-medium text-cyan-400">{currentUser.name}</span>
+                                </h2>
+                                <p className="text-white/40 text-sm">Here is your wellness breakdown based on real-time analysis.</p>
+                            </div>
+                        )}
+
+                        <div className="space-y-3">
+                            <MetricCard
+                                label="Skin Health"
+                                score={scores?.skin ?? null}
+                                icon="✨"
+                                detail="Hydration & Model analysis"
+                            />
+                            <MetricCard
+                                label="Posture"
+                                score={scores?.posture ?? null}
+                                icon="🧘"
+                                detail="Shoulder alignment check"
+                            />
+                            <MetricCard
+                                label="Eye Strain"
+                                score={scores?.eyes ?? null}
+                                icon="👁️"
+                                detail="Blink rate analysis"
+                            />
+                            <MetricCard
+                                label="Thermal"
+                                score={scores?.thermal ?? null}
+                                icon="🌡️"
+                                detail="Facial temperature distribution"
+                                disabled={scores?.thermal === null}
+                            />
+                        </div>
+
+                        <button
+                            onClick={handleClose}
+                            className="mt-8 self-start text-white/40 hover:text-white/60 transition-colors text-sm flex items-center gap-2"
+                        >
+                            <span className="text-lg">↩</span> Return to Mirror
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
