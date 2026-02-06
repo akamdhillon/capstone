@@ -47,12 +47,12 @@ COPY . .
 RUN mkdir -p /app/models /app/test_media /app/logs
 
 # Expose service ports
-# 8001: Face Recognition
-# 8002: Skin Analysis
-# 8003: Posture Detection
-# 8004: Eye Strain
-# 8005: Thermal (conditional)
-EXPOSE 8001 8002 8003 8004 8005
+# 8002: Face Recognition
+# 8003: Skin Analysis
+# 8004: Posture Detection
+# 8005: Eye Strain
+# 8006: Thermal (conditional)
+EXPOSE 8002 8003 8004 8005 8006
 
 # Health check for primary service
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \

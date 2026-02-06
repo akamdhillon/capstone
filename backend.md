@@ -14,7 +14,7 @@ The Orchestrator runs on a Raspberry Pi 4 (4GB). It acts as the API Gateway, man
 
 ### A. API Gateway (FastAPI)
 - **Responsibility:** Single entry point for the Frontend
-- **Logic:** When the UI requests an analysis, the Gateway must trigger parallel requests to the Jetson's ML services (Ports 8001-8005)
+- **Logic:** When the UI requests an analysis, the Gateway must trigger parallel requests to the Jetson's ML services (Ports 8002-8006)
 - **Security:** Use AES-256-GCM for encrypting face embeddings stored in the DB
 
 ### B. Wellness Scoring Engine

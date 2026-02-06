@@ -42,11 +42,11 @@ class Settings(BaseSettings):
     janitor_schedule_hour: int = Field(default=2, alias="JANITOR_SCHEDULE_HOUR")
     
     # Jetson Service Ports
-    jetson_face_port: int = 8001
-    jetson_skin_port: int = 8002
-    jetson_posture_port: int = 8003
-    jetson_eye_port: int = 8004
-    jetson_thermal_port: int = 8005
+    jetson_face_port: int = 8002
+    jetson_skin_port: int = 8003
+    jetson_posture_port: int = 8004
+    jetson_eye_port: int = 8005
+    jetson_thermal_port: int = 8006
     
     class Config:
         env_file = ".env"

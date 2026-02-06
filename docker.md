@@ -52,7 +52,7 @@ services:
     container_name: clarity_ml
     runtime: ${DOCKER_RUNTIME:-runc}  # Use 'nvidia' on the actual Jetson
     ports:
-      - "8001-8005:8001-8005"
+      - "8002-8006:8002-8006"
     environment:
       - ENABLE_THERMAL=false
       - DEV_MODE=true  # Tells OpenCV to use a video file instead of a camera

@@ -1,344 +1,195 @@
 """
-Clarity+ Jetson ML Service Layer - Main Entry Point
-====================================================
-Launches all ML inference services as FastAPI applications.
-Each service runs on its designated port (8001-8005).
-
-Services:
-    - Port 8001: Face Recognition (DeepFace)
-    - Port 8002: Skin Analysis (YOLOv8)
-    - Port 8003: Posture Detection (MediaPipe)
-    - Port 8004: Eye Strain Analysis (EAR)
-    - Port 8005: Thermal (Ghost Service - returns null when disabled)
+Clarity+ Orchestrator
+=====================
+Command Center.
+Starts camera, saves snapshots, and orchestrates analysis via microservices.
 """
 
-import asyncio
-import logging
-import signal
 import sys
-from typing import List
-
+import os
+import time
+import logging
+import cv2
+import threading
+from fastapi import FastAPI, UploadFile, File
+import requests
 import uvicorn
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
-from config import settings
+from typing import Optional
+import numpy as np
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
-logger = logging.getLogger("clarity-ml")
-
-
-def create_app(service_name: str) -> FastAPI:
-    """Create a FastAPI application for a specific service."""
-    app = FastAPI(
-        title=f"Clarity+ {service_name}",
-        description=f"ML inference endpoint for {service_name}",
-        version="1.0.0"
-    )
+# --- Camera Manager ---
+try:
+    from config import settings, IS_MAC
+except ImportError:
+    class Settings:
+        CAMERA_RESOLUTION_WIDTH = 1920
+        CAMERA_RESOLUTION_HEIGHT = 1080
+        CAMERA_FPS = 30
+        MAC_CAMERA_INDEX = 0
+        CAMERA_DEVICE_PRIMARY = 0
+        USE_GSTREAMER = False
+        DEV_MODE = False
+        DEV_VIDEO_PATH = "video.mp4"
+        camera_source_primary = 0
+        camera_source_secondary = 1
     
-    # CORS middleware for cross-origin requests
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    
-    return app
-
-
-# =============================================================================
-# SERVICE APPLICATIONS
-# =============================================================================
-
-# Face Recognition Service (Port 8001)
-face_app = create_app("Face Recognition")
-
-# Skin Analysis Service (Port 8002)
-skin_app = create_app("Skin Analysis")
-
-# Posture Service (Port 8003)
-posture_app = create_app("Posture Detection")
-
-# Eye Strain Service (Port 8004)
-eye_app = create_app("Eye Strain")
-
-# Thermal Service (Port 8005) - Ghost Service
-thermal_app = create_app("Thermal")
-
-
-# =============================================================================
-# ROUTER IMPORTS & MOUNTING
-# =============================================================================
-
-def setup_routers():
-    """Import and mount all service routers."""
-    from routers import face, skin, posture, eyes, thermal
-    
-    face_app.include_router(face.router, tags=["Face Recognition"])
-    skin_app.include_router(skin.router, tags=["Skin Analysis"])
-    posture_app.include_router(posture.router, tags=["Posture"])
-    eye_app.include_router(eyes.router, tags=["Eye Strain"])
-    thermal_app.include_router(thermal.router, tags=["Thermal"])
-
-
-# =============================================================================
-# HEALTH CHECK ENDPOINTS
-# =============================================================================
-
-@face_app.get("/health")
-async def face_health():
-    """Health check for Face Recognition service."""
-    return {"status": "healthy", "service": "face_recognition", "port": 8001}
-
-
-@skin_app.get("/health")
-async def skin_health():
-    """Health check for Skin Analysis service."""
-    return {"status": "healthy", "service": "skin_analysis", "port": 8002}
-
-
-@posture_app.get("/health")
-async def posture_health():
-    """Health check for Posture service."""
-    return {"status": "healthy", "service": "posture", "port": 8003}
-
-
-@eye_app.get("/health")
-async def eye_health():
-    """Health check for Eye Strain service."""
-    return {"status": "healthy", "service": "eye_strain", "port": 8004}
-
-
-@thermal_app.get("/health")
-async def thermal_health():
-    """Health check for Thermal service (ghost service)."""
-    return {
-        "status": "healthy",
-        "service": "thermal",
-        "port": 8005,
-        "enabled": settings.ENABLE_THERMAL
-    }
-
-
-# =============================================================================
-# DEBUG ENDPOINTS (For troubleshooting)
-# =============================================================================
-
-def get_debug_info():
-    """Get common debug information for all services."""
+    settings = Settings()
     import platform
-    import sys
-    import os
-    from config import IS_MAC, IS_LINUX
-    
-    return {
-        "platform": {
-            "system": platform.system(),
-            "release": platform.release(),
-            "machine": platform.machine(),
-            "python_version": sys.version,
-            "is_mac": IS_MAC,
-            "is_linux": IS_LINUX
-        },
-        "settings": {
-            "dev_mode": settings.DEV_MODE,
-            "enable_thermal": settings.ENABLE_THERMAL,
-            "model_precision": settings.MODEL_PRECISION,
-            "host": settings.HOST,
-            "camera_primary": str(settings.camera_source_primary),
-            "camera_secondary": str(settings.camera_source_secondary),
-            "use_gstreamer": settings.USE_GSTREAMER,
-            "dev_video_path": settings.DEV_VIDEO_PATH if settings.DEV_MODE else None
-        },
-        "ports": {
-            "face_recognition": settings.FACE_RECOGNITION_PORT,
-            "skin_analysis": settings.SKIN_ANALYSIS_PORT,
-            "posture": settings.POSTURE_PORT,
-            "eye_strain": settings.EYE_STRAIN_PORT,
-            "thermal": settings.THERMAL_PORT
-        }
-    }
+    IS_MAC = platform.system() == "Darwin"
 
+logger_cam = logging.getLogger("camera")
 
-@face_app.get("/debug")
-async def face_debug():
-    """Debug info for Face Recognition service."""
-    from services.camera import get_camera_manager
-    from routers.face import _service
-    
-    camera = get_camera_manager()
-    
-    return {
-        **get_debug_info(),
-        "service": "face_recognition",
-        "service_initialized": _service.is_initialized if _service else False,
-        "camera": {
-            "running": camera.is_running,
-            "width": camera.width,
-            "height": camera.height,
-            "fps": camera.fps
-        }
-    }
-
-
-@skin_app.get("/debug")
-async def skin_debug():
-    """Debug info for Skin Analysis service."""
-    from services.camera import get_camera_manager
-    from routers.skin import _service
-    
-    camera = get_camera_manager()
-    
-    return {
-        **get_debug_info(),
-        "service": "skin_analysis",
-        "service_initialized": _service.is_initialized if _service else False,
-        "using_tensorrt": _service._using_tensorrt if _service else False,
-        "camera": {
-            "running": camera.is_running
-        }
-    }
-
-
-@posture_app.get("/debug")
-async def posture_debug():
-    """Debug info for Posture service."""
-    from services.camera import get_camera_manager
-    from routers.posture import _service
-    
-    camera = get_camera_manager()
-    
-    return {
-        **get_debug_info(),
-        "service": "posture",
-        "service_initialized": _service.is_initialized if _service else False,
-        "camera": {
-            "running": camera.is_running
-        }
-    }
-
-
-@eye_app.get("/debug")
-async def eye_debug():
-    """Debug info for Eye Strain service."""
-    from services.camera import get_camera_manager
-    from routers.eyes import _service
-    
-    camera = get_camera_manager()
-    
-    return {
-        **get_debug_info(),
-        "service": "eye_strain",
-        "service_initialized": _service.is_initialized if _service else False,
-        "camera": {
-            "running": camera.is_running
-        }
-    }
-
-
-@thermal_app.get("/debug")
-async def thermal_debug():
-    """Debug info for Thermal service."""
-    from routers.thermal import _service
-    
-    return {
-        **get_debug_info(),
-        "service": "thermal",
-        "service_enabled": settings.ENABLE_THERMAL,
-        "service_initialized": _service.is_initialized if _service else False
-    }
-
-
-
-# =============================================================================
-# MULTI-SERVICE RUNNER
-# =============================================================================
-
-class ServiceRunner:
-    """Manages multiple Uvicorn servers running concurrently."""
+class CameraManager:
+    """
+    Manages camera capture (Embedded).
+    """
     
     def __init__(self):
-        self.servers: List[uvicorn.Server] = []
-        self.tasks: List[asyncio.Task] = []
-    
-    def add_service(self, app: FastAPI, port: int, name: str):
-        """Add a service to be run."""
-        config = uvicorn.Config(
-            app=app,
-            host=settings.HOST,
-            port=port,
-            log_level="info",
-            access_log=True
-        )
-        server = uvicorn.Server(config)
-        self.servers.append((server, name, port))
-    
-    async def run_all(self):
-        """Run all registered services concurrently."""
-        async def run_server(server, name, port):
-            logger.info(f"Starting {name} on port {port}")
-            await server.serve()
+        self._cap: Optional[cv2.VideoCapture] = None
+        self._frame: Optional[np.ndarray] = None
+        self._lock = threading.Lock()
+        self._running = False
+        self._thread: Optional[threading.Thread] = None
         
-        self.tasks = [
-            asyncio.create_task(run_server(server, name, port))
-            for server, name, port in self.servers
-        ]
+        self.width = settings.CAMERA_RESOLUTION_WIDTH
+        self.height = settings.CAMERA_RESOLUTION_HEIGHT
+        self.fps = settings.CAMERA_FPS
         
-        await asyncio.gather(*self.tasks, return_exceptions=True)
-    
-    async def shutdown(self):
-        """Gracefully shutdown all servers."""
-        logger.info("Shutting down all services...")
-        for server, name, _ in self.servers:
-            server.should_exit = True
+    def start(self) -> bool:
+        """Start the camera."""
+        if self._running:
+            return True
+            
+        source = 0
+        if IS_MAC:
+            source = settings.MAC_CAMERA_INDEX
+        else:
+            source = settings.CAMERA_DEVICE_PRIMARY
+            
+        logger_cam.info(f"Opening camera source: {source}")
+        self._cap = cv2.VideoCapture(source)
+        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         
-        for task in self.tasks:
-            task.cancel()
+        if not self._cap.isOpened():
+            logger_cam.error("Failed to open camera")
+            return False
+            
+        self._running = True
+        self._thread = threading.Thread(target=self._capture_loop, daemon=True)
+        self._thread.start()
+        return True
+        
+    def _capture_loop(self):
+        while self._running:
+            if self._cap:
+                ret, frame = self._cap.read()
+                if ret:
+                    with self._lock:
+                        self._frame = frame
+                else:
+                    logger_cam.warning("Failed to read frame")
+                    time.sleep(0.1)
+            time.sleep(1.0 / self.fps)
+            
+    def stop(self):
+        self._running = False
+        if self._thread:
+            self._thread.join()
+        if self._cap:
+            self._cap.release()
+            
+    def get_frame(self) -> Optional[np.ndarray]:
+        with self._lock:
+            if self._frame is not None:
+                return self._frame.copy()
+        return None
+
+camera = CameraManager()
 
 
-async def main():
-    """Main entry point for the ML service layer."""
-    logger.info("=" * 60)
-    logger.info("CLARITY+ JETSON ML SERVICE LAYER")
-    logger.info("=" * 60)
-    logger.info(f"DEV_MODE: {settings.DEV_MODE}")
-    logger.info(f"ENABLE_THERMAL: {settings.ENABLE_THERMAL}")
-    logger.info(f"MODEL_PRECISION: {settings.MODEL_PRECISION}")
-    logger.info("=" * 60)
-    
-    # Setup routers
-    setup_routers()
-    
-    # Initialize service runner
-    runner = ServiceRunner()
-    
-    # Register all services
-    runner.add_service(face_app, settings.FACE_RECOGNITION_PORT, "Face Recognition")
-    runner.add_service(skin_app, settings.SKIN_ANALYSIS_PORT, "Skin Analysis")
-    runner.add_service(posture_app, settings.POSTURE_PORT, "Posture Detection")
-    runner.add_service(eye_app, settings.EYE_STRAIN_PORT, "Eye Strain")
-    runner.add_service(thermal_app, settings.THERMAL_PORT, "Thermal (Ghost Service)")
-    
-    # Setup graceful shutdown
-    loop = asyncio.get_event_loop()
-    
-    def signal_handler():
-        logger.info("Received shutdown signal")
-        asyncio.create_task(runner.shutdown())
-    
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, signal_handler)
-    
-    # Run all services
-    await runner.run_all()
+# Configuration
+SNAPSHOT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "snapshots")
+os.makedirs(SNAPSHOT_DIR, exist_ok=True)
 
+# Service Ports
+SERVICES = {
+    "posture": 8002,
+    "eyes": 8003,
+    "skin": 8004,
+    "face": 8005,
+    "thermal": 8006
+}
+
+app = FastAPI(title="Clarity+ Orchestrator")
+logger = logging.getLogger("orchestrator")
+logging.basicConfig(level=logging.INFO)
+
+@app.on_event("startup")
+def startup():
+    logger.info("Starting Camera...")
+    if camera.start():
+        logger.info("Camera started.")
+    else:
+        logger.error("Failed to start camera.")
+
+@app.on_event("shutdown")
+def shutdown():
+    logger.info("Stopping Camera...")
+    camera.stop()
+
+@app.post("/analyze")
+async def analyze_endpoint(file: UploadFile = File(None)):
+    """
+    Main entry point for analysis.
+    If file is provided, uses that.
+    If no file provided, captures from live camera.
+    """
+    timestamp = int(time.time())
+    filename = f"snapshot_{timestamp}.jpg"
+    filepath = os.path.join(SNAPSHOT_DIR, filename)
+    
+    # 1. Acquire Image
+    if file:
+        contents = await file.read()
+        with open(filepath, "wb") as f:
+            f.write(contents)
+        logger.info(f"Received file saved to {filepath}")
+    else:
+        # Capture from camera
+        frame = camera.get_frame()
+        if frame is None:
+            return {"error": "Camera not available and no file uploaded"}
+        cv2.imwrite(filepath, frame)
+        logger.info(f"captured frame saved to {filepath}")
+
+    # 2. Call Services
+    results = {}
+    
+    for name, port in SERVICES.items():
+        logger.info(f"Calling {name} service on port {port}...")
+        url = f"http://localhost:{port}/analyze"
+        payload = {"image_path": filepath}
+        
+        try:
+            # Short timeout since these are local
+            resp = requests.post(url, json=payload, timeout=2)
+            if resp.status_code == 200:
+                results[name] = resp.json()
+            else:
+                results[name] = {"error": f"Status {resp.status_code}"}
+        except Exception as e:
+            logger.error(f"Failed to call {name}: {e}")
+            results[name] = {"error": str(e)}
+
+    return {
+        "success": True,
+        "timestamp": timestamp,
+        "image_path": filepath,
+        "results": results
+    }
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Run the Orchestrator on Port 8001
+    uvicorn.run(app, host="0.0.0.0", port=8001)

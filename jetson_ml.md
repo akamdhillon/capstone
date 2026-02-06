@@ -17,26 +17,26 @@ Each service must be containerized and exposed via a FastAPI wrapper.
 - **Pipeline:** `v4l2src -> GStreamer -> OpenCV VideoCapture`
 - **Output:** High-performance shared memory buffer or internal REST stream for downstream ML nodes
 
-### B. Face Recognition Service (Port 8001)
+### B. Face Recognition Service (Port 8002)
 - **Model:** DeepFace (RetinaFace for detection, FaceNet512 for embeddings)
 - **Requirement:** < 100ms detection; > 95% accuracy
 - **Logic:** Detect face -> Align landmarks -> Generate 512-dim embedding -> Return to Orchestrator for DB matching
 
-### C. Skin Analysis Service (Port 8002)
+### C. Skin Analysis Service (Port 8003)
 - **Model:** YOLOv8n (Nano) optimized via TensorRT (FP16)
 - **Target Classes:** Acne (inflammatory/non), Wrinkles, Dark Spots
 - **Performance:** < 200ms inference time
 
-### D. Posture Service (Port 8003)
+### D. Posture Service (Port 8004)
 - **Model:** MediaPipe Pose (BlazePose GHUM)
 - **Logic:** Calculate head-forward angle and slouch detection (thoracic kyphosis) using 33 body keypoints
 - **Note:** Add a comment placeholder for future MediaPipe Hands gesture control
 
-### E. Eye Strain Service (Port 8004)
+### E. Eye Strain Service (Port 8005)
 - **Metric 1:** Blink Rate via Eye Aspect Ratio (EAR)
 - **Metric 2:** Sclera redness analysis via HSV color-space histograms
 
-### F. Thermal Service Placeholder (Port 8005)
+### F. Thermal Service Placeholder (Port 8006)
 - **Status:** DISABLED by default
 - **Logic:** Implement a FeatureToggle variable `ENABLE_THERMAL = False`
 - **Structure:** Return a null or 0.0 value if disabled to avoid breaking the Orchestrator's wellness score logic

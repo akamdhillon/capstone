@@ -1,15 +1,15 @@
 # =============================================================================
-# CLARITY+ BACKEND - JETSON ML CLIENT
+# CLARITY+ BACKEND - JETSON ML CLIENT (UNIFIED)
 # =============================================================================
 """
-Async HTTP client for communicating with Jetson ML inference services.
-Handles parallel requests to multiple ML endpoints.
+Async HTTP client for communicating with the Unified Jetson ML Service.
+Single endpoint handles image capture and multi-model inference.
 """
 
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Dict
 
 import httpx
 
@@ -17,8 +17,10 @@ from config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Request timeout in seconds
+# Request timeout in seconds (Orchestrator needs more time to run all models)
 REQUEST_TIMEOUT = 10.0
+# Unified Port (should match Jetson main.py)
+JETSON_PORT = 8001
 
 
 @dataclass
@@ -41,34 +43,22 @@ class MLResults:
 
 class JetsonClient:
     """
-    Async client for Jetson ML inference services.
-    
-    Communicates with:
-    - Port 8001: Face Recognition
-    - Port 8002: Skin Analysis  
-    - Port 8003: Posture Detection
-    - Port 8004: Eye Strain
-    - Port 8005: Thermal (conditional)
+    Async client for the Unified Jetson ML Service.
+    Communicates via Port 8001 (Unified Endpoint).
     """
     
     def __init__(self):
         self.settings = get_settings()
-        self.base_url = self.settings.jetson_base_url
+        self.base_url = f"http://{self.settings.jetson_ip}:{JETSON_PORT}"
     
     async def _make_request(
         self,
-        port: int,
         endpoint: str,
         method: str = "POST",
         data: Optional[dict] = None
     ) -> tuple[Optional[dict], Optional[str]]:
-        """
-        Make a request to a Jetson service.
-        
-        Returns:
-            Tuple of (response_data, error_message)
-        """
-        url = f"{self.base_url}:{port}{endpoint}"
+        """Make a request to the Jetson unified service."""
+        url = f"{self.base_url}{endpoint}"
         
         try:
             async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
@@ -100,152 +90,65 @@ class JetsonClient:
             logger.error(error)
             return None, error
     
-    async def trigger_capture(self) -> tuple[bool, Optional[str]]:
-        """
-        Trigger image capture on Jetson cameras.
-        
-        Returns:
-            Tuple of (success, error_message)
-        """
-        data, error = await self._make_request(
-            port=self.settings.jetson_face_port,
-            endpoint="/capture"
-        )
-        if error:
-            return False, error
-        return True, None
-    
-    async def get_face_recognition(self, user_id: Optional[int] = None) -> tuple[Optional[dict], Optional[str]]:
-        """Get face recognition result."""
-        return await self._make_request(
-            port=self.settings.jetson_face_port,
-            endpoint="/recognize",
-            data={"user_id": user_id} if user_id else None
-        )
-    
-    async def get_skin_analysis(self) -> tuple[Optional[dict], Optional[str]]:
-        """Get skin analysis result from live camera feed."""
-        return await self._make_request(
-            port=self.settings.jetson_skin_port,
-            endpoint="/analyze-live"
-        )
-    
-    async def get_posture_analysis(self) -> tuple[Optional[dict], Optional[str]]:
-        """Get posture analysis result from live camera feed."""
-        return await self._make_request(
-            port=self.settings.jetson_posture_port,
-            endpoint="/analyze-live"
-        )
-    
-    async def get_eye_analysis(self) -> tuple[Optional[dict], Optional[str]]:
-        """Get eye strain analysis result from live camera feed."""
-        return await self._make_request(
-            port=self.settings.jetson_eye_port,
-            endpoint="/analyze-live"
-        )
-    
-    async def get_thermal_analysis(self) -> tuple[Optional[dict], Optional[str]]:
-        """
-        Get thermal analysis result.
-        Returns None scores if thermal hardware is disabled.
-        """
-        if not self.settings.thermal_enabled:
-            logger.debug("Thermal analysis skipped - hardware disabled")
-            return {"score": None, "enabled": False}, None
-        
-        return await self._make_request(
-            port=self.settings.jetson_thermal_port,
-            endpoint="/read"
-        )
-    
     async def run_full_analysis(self, user_id: Optional[int] = None) -> MLResults:
         """
-        Run full analysis pipeline in parallel.
+        Trigger full analysis via the unified One-Shot Endpoint.
         
-        Triggers all ML services concurrently and aggregates results.
-        
-        Args:
-            user_id: Optional user ID for face recognition
-            
-        Returns:
-            MLResults container with all scores and details
+        The Jetson Orchestrator handles image capture and all inference locally.
         """
+        endpoint = "/analyze-all"
+        payload = {
+            "user_id": user_id,
+            "include_image": True,
+            "save_history": True
+        }
+        
+        data, error = await self._make_request(endpoint, method="POST", data=payload)
+        
         results = MLResults()
         
-        # Run all analyses in parallel
-        tasks = [
-            self.get_skin_analysis(),
-            self.get_posture_analysis(),
-            self.get_eye_analysis(),
-            self.get_thermal_analysis()
-        ]
+        if error:
+            results.errors.append(f"Orchestrator failed: {error}")
+            return results
         
-        responses = await asyncio.gather(*tasks, return_exceptions=True)
+        if not data.get("success", False):
+            # Server reported partial or total failure
+            server_errors = data.get("errors", [])
+            results.errors.extend(server_errors)
+            if not server_errors:
+                 results.errors.append("Unknown orchestrator failure")
         
-        # Process skin results
-        skin_resp, skin_err = responses[0] if not isinstance(responses[0], Exception) else (None, str(responses[0]))
-        if skin_resp:
-            results.skin_score = skin_resp.get("score")
-            results.skin_details = skin_resp
-        if skin_err:
-            results.errors.append(f"Skin: {skin_err}")
+        # Parse Aggregated Scores
+        scores = data.get("scores", {})
+        results.skin_score = scores.get("skin")
+        results.posture_score = scores.get("posture")
+        results.eye_score = scores.get("eyes")
+        results.thermal_score = scores.get("thermal")
         
-        # Process posture results
-        posture_resp, posture_err = responses[1] if not isinstance(responses[1], Exception) else (None, str(responses[1]))
-        if posture_resp:
-            results.posture_score = posture_resp.get("score")
-            results.posture_details = posture_resp
-        if posture_err:
-            results.errors.append(f"Posture: {posture_err}")
+        # Parse Details
+        # The orchestrator returns 'face', 'skin', 'posture', ...
+        results.skin_details = data.get("skin")
+        results.posture_details = data.get("posture")
+        results.eye_details = data.get("eyes")
+        results.thermal_details = data.get("thermal")
         
-        # Process eye results
-        eye_resp, eye_err = responses[2] if not isinstance(responses[2], Exception) else (None, str(responses[2]))
-        if eye_resp:
-            results.eye_score = eye_resp.get("score")
-            results.eye_details = eye_resp
-        if eye_err:
-            results.errors.append(f"Eye: {eye_err}")
-        
-        # Process thermal results
-        thermal_resp, thermal_err = responses[3] if not isinstance(responses[3], Exception) else (None, str(responses[3]))
-        if thermal_resp and thermal_resp.get("enabled", True):
-            results.thermal_score = thermal_resp.get("score")
-            results.thermal_details = thermal_resp
-        if thermal_err:
-            results.errors.append(f"Thermal: {thermal_err}")
+        # Add image to details if present (hack for frontend compatibility)
+        if data.get("image") and results.skin_details:
+             results.skin_details["image"] = data.get("image")
         
         logger.info(
-            f"Full analysis complete: skin={results.skin_score}, "
+            f"Analysis complete: skin={results.skin_score}, "
             f"posture={results.posture_score}, eyes={results.eye_score}, "
-            f"thermal={results.thermal_score}, errors={len(results.errors)}"
+            f"thermal={results.thermal_score}"
         )
         
         return results
     
     async def health_check(self) -> dict[str, bool]:
-        """
-        Check health of all Jetson services.
-        
-        Returns:
-            Dict mapping service name to health status
-        """
-        async def check_service(name: str, port: int) -> tuple[str, bool]:
-            try:
-                async with httpx.AsyncClient(timeout=2.0) as client:
-                    response = await client.get(f"{self.base_url}:{port}/health")
-                    return name, response.status_code == 200
-            except Exception:
-                return name, False
-        
-        services = [
-            ("face_recognition", self.settings.jetson_face_port),
-            ("skin_analysis", self.settings.jetson_skin_port),
-            ("posture_detection", self.settings.jetson_posture_port),
-            ("eye_strain", self.settings.jetson_eye_port),
-        ]
-        
-        if self.settings.thermal_enabled:
-            services.append(("thermal", self.settings.jetson_thermal_port))
-        
-        results = await asyncio.gather(*[check_service(n, p) for n, p in services])
-        return dict(results)
+        """Check health of the unified service."""
+        _, error = await self._make_request("/health", method="GET")
+        is_healthy = error is None
+        return {
+            "unified_service": is_healthy,
+            "orchestrator": is_healthy
+        }

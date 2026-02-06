@@ -82,11 +82,11 @@ services:
     # NVIDIA runtime for GPU passthrough - critical for TensorRT inference
     runtime: ${DOCKER_RUNTIME:-nvidia}
     ports:
-      - "8001:8001"  # Face Recognition Service
-      - "8002:8002"  # Skin Analysis Service
-      - "8003:8003"  # Posture Detection Service
-      - "8004:8004"  # Eye Strain Service
-      - "8005:8005"  # Thermal Service (conditional)
+      - "8002:8002"  # Face Recognition Service
+      - "8003:8003"  # Skin Analysis Service
+      - "8004:8004"  # Posture Detection Service
+      - "8005:8005"  # Eye Strain Service
+      - "8006:8006"  # Thermal Service (conditional)
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility

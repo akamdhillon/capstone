@@ -13,9 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
-from database.connection import init_database, close_database
-from routes import analysis, users
-from tasks.janitor import start_scheduler, shutdown_scheduler
+from routes import analysis
 
 # Configure logging
 settings = get_settings()
@@ -30,28 +28,16 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
-    Handles startup/shutdown events for database and scheduler.
+    Stateless backend - no DB or Scheduler init.
     """
-    logger.info("🚀 Starting Clarity+ Backend Orchestrator...")
-    
-    # Initialize database
-    await init_database()
-    logger.info("✓ Database initialized")
-    
-    # Start background scheduler for Janitor task
-    start_scheduler()
-    logger.info("✓ Background scheduler started")
+    logger.info("🚀 Starting Clarity+ Backend...")
     
     logger.info(f"✓ Thermal hardware: {'ENABLED' if settings.thermal_enabled else 'DISABLED'}")
     logger.info(f"✓ Scoring weights: {settings.weights}")
     
     yield
     
-    # Cleanup
     logger.info("Shutting down Clarity+ Backend...")
-    shutdown_scheduler()
-    await close_database()
-    logger.info("✓ Shutdown complete")
 
 
 # Create FastAPI application
@@ -77,26 +63,21 @@ app.add_middleware(
 
 # Include routers
 app.include_router(analysis.router, prefix="/api", tags=["Analysis"])
-app.include_router(users.router, prefix="/api", tags=["Users"])
 
 
 @app.get("/health")
 async def health_check():
-    """
-    Health check endpoint for container orchestration.
-    Returns service status and configuration info.
-    """
+    """Health check endpoint."""
     return {
         "status": "ok",
         "service": "clarity-backend",
-        "thermal_enabled": settings.thermal_enabled,
-        "weights": settings.weights
+        "thermal_enabled": settings.thermal_enabled
     }
 
 
 @app.get("/")
 async def root():
-    """Root endpoint with API information."""
+    """Root endpoint."""
     return {
         "message": "Clarity+ Smart Mirror API",
         "docs": "/docs",
