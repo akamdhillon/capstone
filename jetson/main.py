@@ -56,13 +56,36 @@ class CameraManager:
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         
         if not self._cap.isOpened():
-            logger_cam.error("Failed to open camera")
-            return False
+            logger_cam.error("Failed to open camera. Entering LOCKDOWN/MOCK mode.")
+            # We don't return False here, we start a mock thread instead to keep the app alive
+            self._running = True
+            self._thread = threading.Thread(target=self._mock_capture_loop, daemon=True)
+            self._thread.start()
+            return True
             
         self._running = True
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
         return True
+
+    def _mock_capture_loop(self):
+        """Generates dummy frames when camera is unavailable."""
+        logger_cam.warning("Starting MOCK camera loop (Green screen).")
+        while self._running:
+             # Create a green image with timestamp
+            frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+            frame[:] = (0, 255, 0) # Green
+            
+            # Add text
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            cv2.putText(frame, f"MOCK CAMERA - {timestamp}", (50, 50), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+            
+            with self._lock:
+                self._frame = frame
+                
+            time.sleep(1.0 / self.fps)
+
         
     def _capture_loop(self):
         while self._running:

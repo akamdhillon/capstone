@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
@@ -173,10 +173,10 @@ export function EnrollmentView() {
                         <div
                             key={s}
                             className={`w-2 h-2 rounded-full transition-colors ${step === s
-                                    ? 'bg-cyan-400'
-                                    : ['welcome', 'position', 'capture', 'name', 'success'].indexOf(step) > i
-                                        ? 'bg-white/60'
-                                        : 'bg-white/20'
+                                ? 'bg-cyan-400'
+                                : ['welcome', 'position', 'capture', 'name', 'success'].indexOf(step) > i
+                                    ? 'bg-white/60'
+                                    : 'bg-white/20'
                                 }`}
                         />
                     ))}

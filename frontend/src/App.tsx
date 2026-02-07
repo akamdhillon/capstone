@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { AppProvider, useApp } from './context/AppContext';
 import { IdleView } from './views/IdleView';
 import { AnalysisView } from './views/AnalysisView';

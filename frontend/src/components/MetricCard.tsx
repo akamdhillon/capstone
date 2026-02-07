@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { GlassCard } from './ui/GlassCard';
 
 interface MetricCardProps {

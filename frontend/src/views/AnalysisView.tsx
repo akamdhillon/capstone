@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { triggerAnalysis, triggerDebugAnalysis } from '../services/api'; // Import debug trigger
+import { triggerDebugAnalysis } from '../services/api'; // Import debug trigger
 import { WellnessScore } from '../components/WellnessScore';
 import { MetricCard } from '../components/MetricCard';
 import { GlassCard } from '../components/ui/GlassCard';
