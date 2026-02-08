@@ -41,13 +41,12 @@ Runs on Port **3000**.
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
-
-
 **Services**:
+
 - Frontend: [http://localhost:3000](http://localhost:3000)
 - Backend: [http://localhost:8000](http://localhost:8000)
 - Jetson Orchestrator: [http://localhost:8001](http://localhost:8001)
@@ -81,19 +80,19 @@ npm run dev
 
 ### Components
 
-| Component | Location | Port(s) | Purpose |
-|-----------|----------|---------|---------|
-| **Backend Orchestrator** | \`backend/\` | 8000 | FastAPI gateway, SQLite DB, wellness scoring, gamification |
-| **Jetson ML Services** | \`jetson/\` | 8001-8006 | Real-time ML inference (face, skin, posture, eyes, thermal) |
-| **Frontend UI** | \`frontend/\` | 3000 | React SPA for real-time feedback and history trends |
+| Component                | Location      | Port(s)   | Purpose                                                     |
+| ------------------------ | ------------- | --------- | ----------------------------------------------------------- |
+| **Backend Orchestrator** | \`backend/\`  | 8000      | FastAPI gateway, SQLite DB, wellness scoring, gamification  |
+| **Jetson ML Services**   | \`jetson/\`   | 8001-8006 | Real-time ML inference (face, skin, posture, eyes, thermal) |
+| **Frontend UI**          | \`frontend/\` | 3000      | React SPA for real-time feedback and history trends         |
 
 ## ML Services Description
 
-| Port | Service | Model/Library | Description |
-|------|---------|---------------|-------------|
-| 8001 | **Orchestrator** | FastAPI | Main entry point used by Backend to request analysis. |
-| 8002 | Face Recognition | DeepFace (RetinaFace + FaceNet512) | Detect and identify users |
-| 8003 | Skin Analysis | YOLOv8n (TensorRT) | Detect acne, wrinkles, dark spots |
-| 8004 | Posture Detection | MediaPipe Pose | Calculate head tilt, slouch detection |
-| 8005 | Eye Strain | EAR Algorithm + HSV Analysis | Blink rate, sclera redness |
-| 8006 | Thermal | (Ghost Service) | Returns null when disabled |
+| Port | Service           | Model/Library                      | Description                                           |
+| ---- | ----------------- | ---------------------------------- | ----------------------------------------------------- |
+| 8001 | **Orchestrator**  | FastAPI                            | Main entry point used by Backend to request analysis. |
+| 8002 | Face Recognition  | DeepFace (RetinaFace + FaceNet512) | Detect and identify users                             |
+| 8003 | Skin Analysis     | YOLOv8n (TensorRT)                 | Detect acne, wrinkles, dark spots                     |
+| 8004 | Posture Detection | MediaPipe Pose                     | Calculate head tilt, slouch detection                 |
+| 8005 | Eye Strain        | EAR Algorithm + HSV Analysis       | Blink rate, sclera redness                            |
+| 8006 | Thermal           | (Ghost Service)                    | Returns null when disabled                            |
