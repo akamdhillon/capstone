@@ -52,6 +52,10 @@ lerna-debug.log*
 dist/
 dist-ssr/
 
+# Lock files - we use pnpm, so ignore npm/yarn locks
+package-lock.json
+yarn.lock
+
 # ==========================================
 # Environment & Secrets
 # ==========================================
