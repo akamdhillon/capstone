@@ -1,24 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { triggerDebugAnalysis } from '../services/api'; // Import debug trigger
+import { triggerDebugAnalysis } from '../services/api';
 import { WellnessScore } from '../components/WellnessScore';
 import { MetricCard } from '../components/MetricCard';
 import { GlassCard } from '../components/ui/GlassCard';
 
 export function AnalysisView() {
-    const { setView, scores, overallScore, capturedImage, setScores, currentUser } = useApp();
+    const { setView, scores, overallScore, capturedImage, setScores, currentUser, webcamFrame, setWebcamFrame } = useApp();
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Perform analysis on mount
     useEffect(() => {
         const performAnalysis = async () => {
             try {
-                // Use debug analysis for now to bypass user requirement & ensure same results as DevPanel
-                // const result = await triggerAnalysis(currentUser.id);
-                const result = await triggerDebugAnalysis();
+                const result = await triggerDebugAnalysis(webcamFrame ?? undefined);
 
-                // Map debug result to expected format if needed, but they are similar
                 setScores(
                     result.scores,
                     result.overall_score,
@@ -27,14 +23,14 @@ export function AnalysisView() {
             } catch (err) {
                 console.error("Analysis failed:", err);
                 setError("Failed to analyze. Check connection.");
-                // Optional: set a fallback timeout to go back to idle if it fails hard
             } finally {
+                setWebcamFrame(null);
                 setIsLoading(false);
             }
         };
 
         performAnalysis();
-    }, [currentUser, setScores]);
+    }, [currentUser, setScores, webcamFrame, setWebcamFrame]);
 
     // Auto-return to idle after 60 seconds
     useEffect(() => {
@@ -56,10 +52,9 @@ export function AnalysisView() {
     return (
         <div className="min-h-screen bg-black flex flex-col items-center justify-center p-8">
             {isLoading ? (
-                // Loading state
                 <div className="flex flex-col items-center animate-fade-in">
                     <div className="w-20 h-20 border-4 border-white/20 border-t-cyan-400 rounded-full animate-spin mb-6" />
-                    <p className="text-white/60 text-lg">Analyzing Wellness...</p>
+                    <p className="text-white/60 text-lg">Analyzing wellness…</p>
                 </div>
             ) : error ? (
                 // Error state

@@ -91,18 +91,17 @@ class JetsonClient:
             logger.error(error)
             return None, error
     
-    async def run_full_analysis(self, user_id: Optional[int] = None) -> MLResults:
+    async def run_full_analysis(self, user_id: Optional[int] = None, image: Optional[str] = None) -> MLResults:
         """
         Trigger full analysis via the unified One-Shot Endpoint.
         
-        The Jetson Orchestrator handles image capture and all inference locally.
+        If `image` (base64 JPEG) is provided, it is forwarded to the orchestrator
+        so it doesn't need to capture from its own camera.
         """
-        endpoint = "/analyze"  # Updated to match Jetson Orchestrator
-        payload = {
-            "user_id": user_id,
-            "include_image": True,
-            "save_history": True
-        }
+        endpoint = "/analyze"
+        payload: Dict = {}
+        if image:
+            payload["image"] = image
         
         data, error = await self._make_request(endpoint, method="POST", data=payload)
         
