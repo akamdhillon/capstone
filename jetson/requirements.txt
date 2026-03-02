@@ -5,3 +5,7 @@ requests
 numpy
 opencv-python-headless
 python-dotenv
+torch
+torchvision
+timm
+Pillow
