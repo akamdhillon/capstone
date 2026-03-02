@@ -2,6 +2,31 @@
 
 A real-time wellness monitoring system that uses computer vision and machine learning to analyze skin health, posture, eye strain, and thermal data, all displayed on a smart mirror interface.
 
+## Prerequisites
+
+### Git LFS (Required for skin analysis model)
+
+The skin analysis model checkpoint (`best_model.pth`, ~54MB) is stored in Git LFS. You must install Git LFS before cloning or pulling this repo, otherwise the model file will be a placeholder and skin analysis will fall back to a random stub.
+
+**macOS:**
+```bash
+brew install git-lfs
+git lfs install
+```
+
+**Windows:**
+Download and run the installer from [git-lfs.github.com](https://git-lfs.github.com), then:
+```bash
+git lfs install
+```
+
+After installing, pull the model file if you already have the repo cloned:
+```bash
+git lfs pull
+```
+
+---
+
 ## Quick Start (Local Mac Development)
 
 ### 1. Backend (Orchestrator)
