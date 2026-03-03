@@ -11,12 +11,14 @@ import time
 import logging
 import cv2
 import threading
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI
 import requests
 import uvicorn
 
 from typing import Optional
+import base64
 import numpy as np
+from pydantic import BaseModel
 
 # --- Camera Manager ---
 from config import settings, IS_MAC
@@ -145,45 +147,48 @@ def shutdown():
     logger.info("Stopping Camera...")
     camera.stop()
 
+class AnalyzePayload(BaseModel):
+    image: Optional[str] = None  # base64-encoded JPEG from frontend
+
+
 @app.post("/analyze")
-async def analyze_endpoint(file: UploadFile = File(None)):
+async def analyze_endpoint(payload: AnalyzePayload = None):
     """
     Main entry point for analysis.
-    If file is provided, uses that.
-    If no file provided, captures from live camera.
+    Accepts an optional base64 image from the frontend/backend.
+    Falls back to local camera capture if no image provided.
     """
-
     logger.info("Received analyze request")
 
     timestamp = int(time.time())
     filename = f"snapshot_{timestamp}.jpg"
     filepath = os.path.join(SNAPSHOT_DIR, filename)
-    
-    # 1. Acquire Image
-    if file:
-        contents = await file.read()
-        with open(filepath, "wb") as f:
-            f.write(contents)
-        logger.info(f"Received file saved to {filepath}")
+
+    # 1. Acquire image — prefer base64 payload, fall back to camera
+    if payload and payload.image:
+        try:
+            img_bytes = base64.b64decode(payload.image)
+            with open(filepath, "wb") as f:
+                f.write(img_bytes)
+            logger.info(f"Received base64 image saved to {filepath}")
+        except Exception as e:
+            logger.error(f"Failed to decode base64 image: {e}")
+            return {"success": False, "error": "Invalid base64 image"}
     else:
-        # Capture from camera
         frame = camera.get_frame()
         if frame is None:
-            return {"error": "Camera not available and no file uploaded"}
+            return {"success": False, "error": "Camera not available and no image provided"}
         cv2.imwrite(filepath, frame)
-        logger.info(f"captured frame saved to {filepath}")
+        logger.info(f"Captured frame saved to {filepath}")
 
-    # 2. Call Services
+    # 2. Call services
     results = {}
-    
     for name, port in SERVICES.items():
         logger.info(f"Calling {name} service on port {port}...")
         url = f"http://localhost:{port}/analyze"
-        payload = {"image_path": filepath}
-        
+        svc_payload = {"image_path": filepath}
         try:
-            # Short timeout since these are local
-            resp = requests.post(url, json=payload, timeout=2)
+            resp = requests.post(url, json=svc_payload, timeout=5)
             if resp.status_code == 200:
                 results[name] = resp.json()
             else:
@@ -192,8 +197,7 @@ async def analyze_endpoint(file: UploadFile = File(None)):
             logger.error(f"Failed to call {name}: {e}")
             results[name] = {"error": str(e)}
 
-    # 3. Prepare Response (include image as base64)
-    import base64
+    # 3. Return response with base64 image
     image_b64 = None
     try:
         with open(filepath, "rb") as img_file:
@@ -211,4 +215,4 @@ async def analyze_endpoint(file: UploadFile = File(None)):
 
 if __name__ == "__main__":
     # Run the Orchestrator on Port 8001
-    uvicorn.run(app, host=settings.JETSON_IP, port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from routes import analysis
+from routes import analysis, face
 
 # Configure logging
 # settings = get_settings() # Removed, imported directly
@@ -62,6 +62,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(analysis.router, prefix="/api", tags=["Analysis"])
+app.include_router(face.router, prefix="/api", tags=["Face"])
 
 
 @app.get("/health")

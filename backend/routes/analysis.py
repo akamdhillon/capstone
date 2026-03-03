@@ -10,6 +10,7 @@ import logging
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from config import settings
 from models import AnalysisRequest, AnalysisResult
@@ -97,17 +98,22 @@ async def debug_info():
     }
 
 
+class DebugAnalyzeRequest(BaseModel):
+    image: Optional[str] = None  # base64-encoded JPEG from frontend webcam
+
+
 @router.post("/debug/analyze")
-async def debug_analyze():
+async def debug_analyze(request: DebugAnalyzeRequest = None):
     """
     Debug analysis without saving to DB.
-    Calls Jetson directly and calculates score.
+    Accepts an optional base64 webcam image from the frontend.
     """
     import time
     start_time = time.time()
     
+    image = request.image if request else None
     client = JetsonClient()
-    ml_results = await client.run_full_analysis()
+    ml_results = await client.run_full_analysis(image=image)
     
     engine = WellnessScoringEngine()
     overall_score, weights_used = engine.calculate(
