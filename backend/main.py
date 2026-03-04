@@ -8,12 +8,42 @@ Runs on Raspberry Pi 4, orchestrating ML inference requests to Jetson.
 
 import logging
 from contextlib import asynccontextmanager
+from typing import Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from config import settings
-from routes import analysis, face
+from routes import analysis, face, llm_voice
+import voice_orchestrator
+
+# --- WebSocket Manager ---
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                pass
+
+manager = ConnectionManager()
+
+# --- Models ---
+class VoiceStatus(BaseModel):
+    state: str  # IDLE, LISTENING, PROCESSING, SPEAKING
+    user_id: Optional[str] = None
+    display_name: Optional[str] = None
 
 # Configure logging
 # settings = get_settings() # Removed, imported directly
@@ -63,6 +93,29 @@ app.add_middleware(
 # Include routers
 app.include_router(analysis.router, prefix="/api", tags=["Analysis"])
 app.include_router(face.router, prefix="/api", tags=["Face"])
+app.include_router(llm_voice.router, prefix="/api/voice_old", tags=["Voice Old"])
+app.include_router(voice_orchestrator.router, prefix="/voice", tags=["Voice"])
+
+
+# --- Voice System Endpoints ---
+
+@app.websocket("/ws/voice")
+async def voice_websocket(websocket: WebSocket):
+    """WebSocket for frontend to receive voice state updates."""
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+@app.post("/api/voice/status")
+async def update_voice_status(status: VoiceStatus):
+    """Endpoint for Pi Client to report its current state."""
+    logger.info(f"Voice Status Update: {status.state}")
+    await manager.broadcast(status.dict())
+    return {"status": "ok"}
 
 
 @app.get("/health")

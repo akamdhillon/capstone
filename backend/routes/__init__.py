@@ -5,5 +5,6 @@
 
 from . import analysis
 from . import face
+from . import llm_voice
 
-__all__ = ["analysis", "face"]
+__all__ = ["analysis", "face", "llm_voice"]
