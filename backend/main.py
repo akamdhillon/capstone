@@ -133,6 +133,17 @@ async def navigate(command: NavigateCommand):
     return {"status": "ok", "navigated_to": command.view}
 
 
+class ActionCommand(BaseModel):
+    action: str  # e.g., 'recognize'
+
+@app.post("/api/action")
+async def broadcast_action(command: ActionCommand):
+    """Broadcast a specific action trigger to the frontend via WebSocket."""
+    logger.info(f"Action Command: {command.action}")
+    await manager.broadcast({"action": command.action})
+    return {"status": "ok", "action": command.action}
+
+
 # --- Posture Results Storage ---
 
 POSTURE_RESULTS_FILE = Path(__file__).resolve().parent / "data" / "posture_results.json"

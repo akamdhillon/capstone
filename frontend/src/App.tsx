@@ -9,7 +9,7 @@ import { VoiceIndicator } from './components/VoiceIndicator';
 import './index.css';
 
 function AppContent() {
-  const { currentView, setView } = useApp();
+  const { currentView, setView, setTriggerRecognition } = useApp();
 
   // ── Global WebSocket listener for voice-driven navigation ──
   useEffect(() => {
@@ -23,11 +23,16 @@ function AppContent() {
             setView(data.navigate as ViewType);
           }
         }
+
+        // Handle voice action triggers
+        if (data.action === 'recognize') {
+          setTriggerRecognition(true);
+        }
       } catch { /* ignore non-JSON */ }
     };
     ws.onerror = () => { /* silently reconnect handled by browser */ };
     return () => ws.close();
-  }, [setView]);
+  }, [setView, setTriggerRecognition]);
 
   // Render the appropriate view
   return (

@@ -88,6 +88,23 @@ async def process_voice_intent(request: VoiceIntentRequest):
     if request.user_id: context.append(f"User ID: {request.user_id}")
     if request.display_name: context.append(f"Display Name: {request.display_name}")
     
+    # ── Inject Posture History Context ──
+    try:
+        from pathlib import Path
+        db_path = Path(__file__).resolve().parent / "data" / "posture_results.json"
+        if db_path.exists():
+            with open(db_path, "r") as f:
+                history_data = json.load(f)
+                if history_data:
+                    # Get the most recent entry
+                    latest = history_data[-1]
+                    score = latest.get("score")
+                    status = latest.get("status")
+                    if score is not None and status:
+                        context.append(f"Latest Posture Score: {score}/100, Status: {status}")
+    except Exception as e:
+        logger.error(f"Failed to read posture history for context: {e}")
+        
     user_msg_content = f"[{', '.join(context)}]\n{request.user_text}" if context else request.user_text
     messages.append({"role": "user", "content": user_msg_content})
 
@@ -131,23 +148,42 @@ async def process_voice_intent(request: VoiceIntentRequest):
             action_result = await _execute_jetson_action(name, params, request.user_id)
             actions_run.append(VoiceAction(name=name, params=params, result=action_result))
 
-        # ── Navigation broadcasts ──────────────────────────────
-        # If posture check was triggered, switch frontend to posture view
-        posture_actions = [a for a in actions_run if a.name == "run_posture_check"]
-        if posture_actions or intent == "POSTURE_CHECK":
+        # ── Navigation & Action Broadcasts ──────────────────────────────
+        
+        async def _broadcast_nav(view_name: str):
             try:
                 async with httpx.AsyncClient() as client:
-                    await client.post("http://localhost:8000/api/navigate", json={"view": "posture"})
+                    await client.post("http://localhost:8000/api/navigate", json={"view": view_name})
             except Exception:
                 pass
 
-        # If user wants to go home / back to mirror
-        if intent in ("NAVIGATE_HOME", "GO_HOME", "GO_BACK"):
+        async def _broadcast_action(action_name: str):
             try:
                 async with httpx.AsyncClient() as client:
-                    await client.post("http://localhost:8000/api/navigate", json={"view": "idle"})
+                    await client.post("http://localhost:8000/api/action", json={"action": action_name})
             except Exception:
                 pass
+
+        # Posture triggers
+        posture_actions = [a for a in actions_run if a.name == "run_posture_check"]
+        if posture_actions or intent == "POSTURE_CHECK":
+            await _broadcast_nav("posture")
+
+        # Home triggers
+        if intent in ("NAVIGATE_HOME", "GO_HOME", "GO_BACK"):
+            await _broadcast_nav("idle")
+            
+        # Analysis triggers
+        if intent == "FULL_ANALYSIS":
+            await _broadcast_nav("analysis")
+            
+        # Enrollment triggers
+        if intent == "ENROLL_USER":
+            await _broadcast_nav("enrollment")
+            
+        # Recognition triggers
+        if intent == "RECOGNIZE_USER":
+            await _broadcast_action("recognize")
 
         return VoiceIntentResponse(
             assistant_message=assistant_msg,

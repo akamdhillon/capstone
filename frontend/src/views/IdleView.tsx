@@ -1,10 +1,10 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Clock } from '../components/Clock';
 import { useApp } from '../context/AppContext';
 import { detectFace, recognizeFace } from '../services/api';
 
 export function IdleView() {
-    const { setView, setCurrentUser, setWebcamFrame } = useApp();
+    const { setView, setCurrentUser, setWebcamFrame, triggerRecognition, setTriggerRecognition } = useApp();
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -124,6 +124,15 @@ export function IdleView() {
 
         setIsRecognizing(false);
     };
+
+    // ── Voice-triggered Recognition ──
+    useEffect(() => {
+        if (triggerRecognition && !isRecognizing) {
+            setTriggerRecognition(false);
+            handleRecognize();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [triggerRecognition, isRecognizing, setTriggerRecognition]);
 
     const handleCancel = () => {
         stopCamera();

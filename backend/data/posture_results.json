@@ -141,5 +141,21 @@
     ],
     "frames_analyzed": 300,
     "timestamp": "2026-03-03T19:14:33.470433"
+  },
+  {
+    "score": 34,
+    "status": "poor",
+    "neck_angle": 20.0,
+    "torso_angle": 8.2,
+    "neck_status": "poor",
+    "torso_status": "poor",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 300,
+    "timestamp": "2026-03-04T16:35:46.505274"
   }
 ]

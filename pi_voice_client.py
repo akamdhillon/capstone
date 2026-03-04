@@ -225,6 +225,10 @@ def main():
     logger.info("Listening for wake word...")
     
     last_state = None
+    last_user_id = None
+    last_auth_time = 0
+    AUTH_TIMEOUT = 300  # 5 minutes
+    
     try:
         while True:
             global VOICE_HISTORY
@@ -237,6 +241,8 @@ def main():
             
             if keyword_index >= 0:
                 logger.info("\n=== WAKE WORD DETECTED ===")
+                current_time = time.time()
+                
                 if last_state != "LISTENING":
                     report_status("LISTENING")
                     last_state = "LISTENING"
@@ -255,11 +261,20 @@ def main():
                 
                 logger.info(f"Identified user: {display_name} ({user_id})")
                 
-                # Greet the user
-                greeting = f"Hey {display_name}! How's it going? What can I help you with?"
+                # Greet the user (short vs verbose based on session cache)
                 report_status("SPEAKING", user_id, display_name)
                 last_state = "SPEAKING"
-                play_tts(greeting)
+                
+                if user_id == last_user_id and (current_time - last_auth_time) < AUTH_TIMEOUT:
+                    # Already logged in recently
+                    play_tts("Yes?")
+                else:
+                    # New session
+                    play_tts(f"Hey {display_name}.")
+                
+                # Update session cache
+                last_user_id = user_id
+                last_auth_time = current_time
                 
                 # Now listen for their actual command
                 report_status("LISTENING", user_id, display_name)
