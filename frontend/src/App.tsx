@@ -1,12 +1,33 @@
+import { useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import type { ViewType } from './context/AppContext';
 import { IdleView } from './views/IdleView';
 import { AnalysisView } from './views/AnalysisView';
 import { EnrollmentView } from './views/EnrollmentView';
+import { PostureView } from './views/PostureView';
 import { VoiceIndicator } from './components/VoiceIndicator';
 import './index.css';
 
 function AppContent() {
-  const { currentView } = useApp();
+  const { currentView, setView } = useApp();
+
+  // ── Global WebSocket listener for voice-driven navigation ──
+  useEffect(() => {
+    const ws = new WebSocket('ws://localhost:8000/ws/voice');
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.navigate) {
+          const validViews: ViewType[] = ['idle', 'analysis', 'enrollment', 'posture'];
+          if (validViews.includes(data.navigate)) {
+            setView(data.navigate as ViewType);
+          }
+        }
+      } catch { /* ignore non-JSON */ }
+    };
+    ws.onerror = () => { /* silently reconnect handled by browser */ };
+    return () => ws.close();
+  }, [setView]);
 
   // Render the appropriate view
   return (
@@ -20,6 +41,8 @@ function AppContent() {
             return <AnalysisView />;
           case 'enrollment':
             return <EnrollmentView />;
+          case 'posture':
+            return <PostureView />;
           default:
             return <IdleView />;
         }

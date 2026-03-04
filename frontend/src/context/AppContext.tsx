@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useCallback, type ReactNode } from
 import type { AnalysisScores, User } from '../services/api';
 
 // View types
-export type ViewType = 'idle' | 'analysis' | 'enrollment';
+export type ViewType = 'idle' | 'analysis' | 'enrollment' | 'posture';
 
 // App state interface
 interface AppState {

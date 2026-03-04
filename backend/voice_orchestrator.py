@@ -99,7 +99,22 @@ async def process_voice_intent(request: VoiceIntentRequest):
             format='json'
         )
         llm_response = response['message']['content']
-        parsed = json.loads(llm_response)
+        
+        # Llama 3.2 1B sometimes wraps JSON in code blocks even with format='json'
+        llm_response = llm_response.strip()
+        if llm_response.startswith('```json'):
+            llm_response = llm_response[7:]
+        if llm_response.startswith('```'):
+            llm_response = llm_response[3:]
+        if llm_response.endswith('```'):
+            llm_response = llm_response[:-3]
+        llm_response = llm_response.strip()
+
+        try:
+            parsed = json.loads(llm_response)
+        except json.JSONDecodeError:
+            logger.error(f"Failed to parse LLM JSON: {llm_response}")
+            parsed = {"assistant_message": "Okay.", "intent": "OTHER", "actions": []}
         
         assistant_msg = parsed.get("assistant_message", "Okay.")
         intent = parsed.get("intent", "OTHER")
@@ -115,7 +130,25 @@ async def process_voice_intent(request: VoiceIntentRequest):
             params = raw_action.get("params", {})
             action_result = await _execute_jetson_action(name, params, request.user_id)
             actions_run.append(VoiceAction(name=name, params=params, result=action_result))
-            
+
+        # ── Navigation broadcasts ──────────────────────────────
+        # If posture check was triggered, switch frontend to posture view
+        posture_actions = [a for a in actions_run if a.name == "run_posture_check"]
+        if posture_actions or intent == "POSTURE_CHECK":
+            try:
+                async with httpx.AsyncClient() as client:
+                    await client.post("http://localhost:8000/api/navigate", json={"view": "posture"})
+            except Exception:
+                pass
+
+        # If user wants to go home / back to mirror
+        if intent in ("NAVIGATE_HOME", "GO_HOME", "GO_BACK"):
+            try:
+                async with httpx.AsyncClient() as client:
+                    await client.post("http://localhost:8000/api/navigate", json={"view": "idle"})
+            except Exception:
+                pass
+
         return VoiceIntentResponse(
             assistant_message=assistant_msg,
             intent=intent,

@@ -7,3 +7,4 @@ opencv-python-headless
 python-dotenv
 insightface
 onnxruntime
+mediapipe

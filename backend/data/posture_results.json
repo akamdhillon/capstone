@@ -1,0 +1,145 @@
+[
+  {
+    "score": 20,
+    "status": "poor",
+    "neck_angle": 35.3,
+    "torso_angle": 0.8,
+    "neck_status": "poor",
+    "torso_status": "good",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)"
+    ],
+    "frames_analyzed": 30,
+    "timestamp": "2026-03-03T17:40:49.194312"
+  },
+  {
+    "score": 45,
+    "status": "poor",
+    "neck_angle": 14.7,
+    "torso_angle": 4.6,
+    "neck_status": "poor",
+    "torso_status": "good",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)"
+    ],
+    "frames_analyzed": 293,
+    "timestamp": "2026-03-03T17:54:49.313929"
+  },
+  {
+    "score": 27,
+    "status": "poor",
+    "neck_angle": 23.5,
+    "torso_angle": 8.6,
+    "neck_status": "poor",
+    "torso_status": "poor",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 300,
+    "timestamp": "2026-03-03T17:55:27.158597"
+  },
+  {
+    "score": 50,
+    "status": "poor",
+    "neck_angle": 8.6,
+    "torso_angle": 8.0,
+    "neck_status": "moderate",
+    "torso_status": "poor",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 300,
+    "timestamp": "2026-03-03T18:47:51.008123"
+  },
+  {
+    "score": 67,
+    "status": "moderate",
+    "neck_angle": 8.8,
+    "torso_angle": 4.0,
+    "neck_status": "moderate",
+    "torso_status": "good",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)"
+    ],
+    "frames_analyzed": 299,
+    "timestamp": "2026-03-03T18:48:49.969272"
+  },
+  {
+    "score": 70,
+    "status": "moderate",
+    "neck_angle": 3.6,
+    "torso_angle": 6.7,
+    "neck_status": "good",
+    "torso_status": "moderate",
+    "recommendations": [
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 300,
+    "timestamp": "2026-03-03T19:00:31.203353"
+  },
+  {
+    "score": 71,
+    "status": "moderate",
+    "neck_angle": 8.1,
+    "torso_angle": 0.7,
+    "neck_status": "moderate",
+    "torso_status": "good",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)"
+    ],
+    "frames_analyzed": 297,
+    "timestamp": "2026-03-03T19:07:08.399013"
+  },
+  {
+    "score": 91,
+    "status": "good",
+    "neck_angle": 7.7,
+    "torso_angle": 3.9,
+    "neck_status": "good",
+    "torso_status": "good",
+    "recommendations": [],
+    "frames_analyzed": 296,
+    "timestamp": "2026-03-03T19:08:08.395434"
+  },
+  {
+    "score": 20,
+    "status": "poor",
+    "neck_angle": 29.7,
+    "torso_angle": 6.5,
+    "neck_status": "poor",
+    "torso_status": "moderate",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 300,
+    "timestamp": "2026-03-03T19:09:04.044329"
+  },
+  {
+    "score": 45,
+    "status": "poor",
+    "neck_angle": 14.4,
+    "torso_angle": 4.5,
+    "neck_status": "poor",
+    "torso_status": "good",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)"
+    ],
+    "frames_analyzed": 300,
+    "timestamp": "2026-03-03T19:14:33.470433"
+  }
+]

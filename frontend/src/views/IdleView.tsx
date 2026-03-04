@@ -239,6 +239,14 @@ export function IdleView() {
                 🎙️ Try Voice Mode
             </button>
 
+            {/* Posture Check Button */}
+            <button
+                onClick={() => setView('posture')}
+                className="mt-3 px-6 py-2 rounded-xl bg-white/5 border border-white/10 text-white/40 text-sm hover:text-white/70 hover:bg-white/10 transition-all"
+            >
+                🧘 Check Posture
+            </button>
+
             {/* Off-screen canvas + fallback video for frame capture */}
             {!showCamera && (
                 <video ref={videoRef} autoPlay playsInline muted
