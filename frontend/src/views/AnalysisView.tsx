@@ -9,6 +9,7 @@ export function AnalysisView() {
     const { setView, scores, overallScore, capturedImage, setScores, currentUser, webcamFrame, setWebcamFrame } = useApp();
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [skinDetails, setSkinDetails] = useState<Record<string, unknown> | null>(null);
 
     useEffect(() => {
         const performAnalysis = async () => {
@@ -20,6 +21,7 @@ export function AnalysisView() {
                     result.overall_score,
                     result.captured_image
                 );
+                setSkinDetails((result.details?.skin as Record<string, unknown>) ?? null);
             } catch (err) {
                 console.error("Analysis failed:", err);
                 setError("Failed to analyze. Check connection.");
@@ -105,7 +107,10 @@ export function AnalysisView() {
                                 label="Skin Health"
                                 score={scores?.skin ?? null}
                                 icon="✨"
-                                detail="Hydration & Model analysis"
+                                detail={(() => {
+                                    const acne = ((skinDetails?.details as Record<string, unknown>)?.acne as Record<string, unknown>) ?? null;
+                                    return acne?.classification ? `Acne: ${acne.classification}` : 'Acne analysis';
+                                })()}
                             />
                             <MetricCard
                                 label="Posture"
