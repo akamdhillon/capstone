@@ -20,6 +20,10 @@ interface AppState {
     capturedImage: string | null;
     setScores: (scores: AnalysisScores | null, overall: number | null, image?: string | null) => void;
 
+    // Webcam frame captured during recognition, reused for analysis
+    webcamFrame: string | null;
+    setWebcamFrame: (frame: string | null) => void;
+
     // Loading state
     isAnalyzing: boolean;
     setIsAnalyzing: (analyzing: boolean) => void;
@@ -39,6 +43,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [scores, setScoresState] = useState<AnalysisScores | null>(null);
     const [overallScore, setOverallScore] = useState<number | null>(null);
     const [capturedImage, setCapturedImage] = useState<string | null>(null);
+    const [webcamFrame, setWebcamFrame] = useState<string | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +67,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         overallScore,
         capturedImage,
         setScores,
+        webcamFrame,
+        setWebcamFrame,
         isAnalyzing,
         setIsAnalyzing,
         error,

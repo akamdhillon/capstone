@@ -9,3 +9,5 @@ torch
 torchvision
 timm
 Pillow
+insightface
+onnxruntime

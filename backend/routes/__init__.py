@@ -4,5 +4,6 @@
 """Routes module exports."""
 
 from . import analysis
+from . import face
 
-__all__ = ["analysis"]
+__all__ = ["analysis", "face"]
