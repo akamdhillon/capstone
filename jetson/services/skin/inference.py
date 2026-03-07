@@ -71,7 +71,7 @@ class AcneInferenceSystem:
         Returns:
             Loaded model
         """
-        checkpoint = torch.load(model_path, map_location=self.device)
+        checkpoint = torch.load(model_path, map_location=self.device, weights_only=False)
         
         model = AcneClassifier(num_classes=5, pretrained=False)
         model.load_state_dict(checkpoint['model_state_dict'])
