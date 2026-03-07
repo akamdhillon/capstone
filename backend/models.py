@@ -28,3 +28,21 @@ class AnalysisHistory(BaseModel):
     eye_score: Optional[float]
     thermal_score: Optional[float]
     computed_score: float
+
+class VoiceIntentRequest(BaseModel):
+    user_text: str
+    user_id: Optional[str] = None
+    display_name: Optional[str] = None
+    history: List[Dict[str, str]] = []
+
+class VoiceAction(BaseModel):
+    name: str
+    params: Dict[str, Any] = {}
+
+class VoiceIntentResponse(BaseModel):
+    assistant_message: str
+    intent: str
+    actions: List[VoiceAction] = []
+    follow_up_needed: bool = False
+    confidence: float = 1.0
+    key_caveats: List[str] = []

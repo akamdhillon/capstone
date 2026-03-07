@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useCallback, type ReactNode } from
 import type { AnalysisScores, User } from '../services/api';
 
 // View types
-export type ViewType = 'idle' | 'analysis' | 'enrollment';
+export type ViewType = 'idle' | 'analysis' | 'enrollment' | 'posture';
 
 // App state interface
 interface AppState {
@@ -31,6 +31,10 @@ interface AppState {
     // Error state
     error: string | null;
     setError: (error: string | null) => void;
+
+    // Voice Action Triggers
+    triggerRecognition: boolean;
+    setTriggerRecognition: (trigger: boolean) => void;
 }
 
 // Create context
@@ -46,6 +50,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [webcamFrame, setWebcamFrame] = useState<string | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [triggerRecognition, setTriggerRecognition] = useState(false);
 
     const setView = useCallback((view: ViewType) => {
         setCurrentView(view);
