@@ -28,3 +28,8 @@ class AnalysisHistory(BaseModel):
     eye_score: Optional[float]
     thermal_score: Optional[float]
     computed_score: float
+
+
+# Voice models are defined in voice_orchestrator.py which is the active voice route.
+# That module includes a richer VoiceAction (with a result field) and uses
+# actions_run instead of actions to reflect executed-action semantics.

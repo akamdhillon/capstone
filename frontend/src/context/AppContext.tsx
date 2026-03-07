@@ -1,42 +1,35 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import type { AnalysisScores, User } from '../services/api';
 
-// View types
-export type ViewType = 'idle' | 'analysis' | 'enrollment';
+export type ViewType = 'idle' | 'analysis' | 'enrollment' | 'posture';
 
-// App state interface
 interface AppState {
-    // Current view
     currentView: ViewType;
     setView: (view: ViewType) => void;
 
-    // Current user
     currentUser: User | null;
     setCurrentUser: (user: User | null) => void;
 
-    // Analysis scores
     scores: AnalysisScores | null;
     overallScore: number | null;
     capturedImage: string | null;
     setScores: (scores: AnalysisScores | null, overall: number | null, image?: string | null) => void;
 
-    // Webcam frame captured during recognition, reused for analysis
     webcamFrame: string | null;
     setWebcamFrame: (frame: string | null) => void;
 
-    // Loading state
     isAnalyzing: boolean;
     setIsAnalyzing: (analyzing: boolean) => void;
 
-    // Error state
     error: string | null;
     setError: (error: string | null) => void;
+
+    triggerRecognition: boolean;
+    setTriggerRecognition: (trigger: boolean) => void;
 }
 
-// Create context
 const AppContext = createContext<AppState | undefined>(undefined);
 
-// Provider component
 export function AppProvider({ children }: { children: ReactNode }) {
     const [currentView, setCurrentView] = useState<ViewType>('idle');
     const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -46,6 +39,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [webcamFrame, setWebcamFrame] = useState<string | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [triggerRecognition, setTriggerRecognition] = useState(false);
 
     const setView = useCallback((view: ViewType) => {
         setCurrentView(view);
@@ -73,12 +67,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setIsAnalyzing,
         error,
         setError,
+        triggerRecognition,
+        setTriggerRecognition,
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
-// Hook to use the context
 export function useApp(): AppState {
     const context = useContext(AppContext);
     if (context === undefined) {

@@ -1,10 +1,11 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { API_BASE_URL } from '../config';
 import { Clock } from '../components/Clock';
 import { useApp } from '../context/AppContext';
 import { detectFace, recognizeFace } from '../services/api';
 
 export function IdleView() {
-    const { setView, setCurrentUser, setWebcamFrame } = useApp();
+    const { setView, setCurrentUser, setWebcamFrame, triggerRecognition, setTriggerRecognition } = useApp();
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -61,7 +62,6 @@ export function IdleView() {
 
             setRecognizeStatus('Looking for your face…');
 
-            // Try up to 3 frames to find a face before sending for recognition
             let b64: string | null = null;
             for (let attempt = 0; attempt < 3; attempt++) {
                 const frame = captureFrame();
@@ -76,7 +76,6 @@ export function IdleView() {
                         break;
                     }
                 } catch {
-                    // detection service might be down, still try recognition
                     b64 = frame;
                     break;
                 }
@@ -99,7 +98,7 @@ export function IdleView() {
                 setRecognizeStatus(`Welcome back, ${result.name}!`);
                 setWebcamFrame(b64);
                 setCurrentUser({
-                    id: Date.now(),
+                    id: result.user_id ?? crypto.randomUUID(),
                     name: result.name,
                     created_at: new Date().toISOString(),
                 });
@@ -124,6 +123,15 @@ export function IdleView() {
 
         setIsRecognizing(false);
     };
+
+    // ── Voice-triggered Recognition ──
+    useEffect(() => {
+        if (triggerRecognition && !isRecognizing) {
+            setTriggerRecognition(false);
+            handleRecognize();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [triggerRecognition, isRecognizing, setTriggerRecognition]);
 
     const handleCancel = () => {
         stopCamera();
@@ -199,6 +207,53 @@ export function IdleView() {
                     {recognizeStatus} <span className="text-white/30 ml-1">✕</span>
                 </button>
             )}
+
+            {/* Voice Test Button */}
+            <button
+                onClick={async () => {
+                    try {
+                        await fetch(`${API_BASE_URL}/api/voice/status`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ state: 'LISTENING', user_id: 'nikunj', display_name: 'Nikunj' })
+                        });
+                        setTimeout(async () => {
+                            await fetch(`${API_BASE_URL}/api/voice/status`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ state: 'PROCESSING', user_id: 'nikunj', display_name: 'Nikunj' })
+                            });
+                        }, 2000);
+                        setTimeout(async () => {
+                            await fetch(`${API_BASE_URL}/api/voice/status`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ state: 'SPEAKING', user_id: 'nikunj', display_name: 'Nikunj' })
+                            });
+                        }, 5000);
+                        setTimeout(async () => {
+                            await fetch(`${API_BASE_URL}/api/voice/status`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ state: 'IDLE' })
+                            });
+                        }, 8000);
+                    } catch (err) {
+                        console.error('Failed to trigger voice test:', err);
+                    }
+                }}
+                className="mt-8 px-6 py-2 rounded-xl bg-white/5 border border-white/10 text-white/40 text-sm hover:text-white/70 hover:bg-white/10 transition-all"
+            >
+                🎙️ Try Voice Mode
+            </button>
+
+            {/* Posture Check Button */}
+            <button
+                onClick={() => setView('posture')}
+                className="mt-3 px-6 py-2 rounded-xl bg-white/5 border border-white/10 text-white/40 text-sm hover:text-white/70 hover:bg-white/10 transition-all"
+            >
+                🧘 Check Posture
+            </button>
 
             {/* Off-screen canvas + fallback video for frame capture */}
             {!showCamera && (

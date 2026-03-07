@@ -64,14 +64,18 @@ async def analyze(request: AnalysisRequest):
         except Exception as e:
             logger.error(f"Acne inference failed, using fallback: {e}", exc_info=True)
 
-    # Fallback if model is unavailable
+    # Fallback if model is unavailable — match the model response shape
     score = random.randint(60, 90)
     return {
         "service": "skin",
         "score": score,
         "details": {
-            "texture": "Smooth",
-            "hydration": "Good",
+            "acne": {
+                "classification": "Unknown",
+                "severity_score": round((1 - score / 100) * 10, 1),
+                "confidence": 0.0,
+                "score": score,
+            },
         },
     }
 

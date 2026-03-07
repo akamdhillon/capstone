@@ -27,6 +27,23 @@ git lfs pull
 
 ---
 
+## Testing
+
+# Backend
+```bash
+cd backend && python -m pytest tests/ -v
+```
+
+# Jetson
+```bash
+cd jetson && python -m pytest tests/ -v
+```
+
+# Frontend
+```bash
+cd frontend && npx vitest run
+```
+
 ## Quick Start (Local Mac Development)
 
 ### 1. Backend (Orchestrator)

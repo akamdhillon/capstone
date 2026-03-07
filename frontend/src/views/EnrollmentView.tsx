@@ -134,7 +134,7 @@ export function EnrollmentView() {
             const result = await enrollFace(name.trim(), images);
             setQualityScore(result.quality_score);
             setCurrentUser({
-                id: Number(result.user_id.split('-')[0]) || Date.now(),
+                id: result.user_id,
                 name: result.name,
                 created_at: new Date().toISOString(),
             });
