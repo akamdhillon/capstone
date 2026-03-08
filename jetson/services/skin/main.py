@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 import logging
-import random
 import os
 from pathlib import Path
 
@@ -77,21 +76,18 @@ async def analyze(request: AnalysisRequest):
                 },
             }
         except Exception as e:
-            logger.error(f"Acne inference failed, using fallback: {e}", exc_info=True)
+            logger.error(f"Acne inference failed: {e}", exc_info=True)
+            return {
+                "service": "skin",
+                "score": None,
+                "error": f"Inference failed: {e}",
+            }
 
-    # Fallback if model is unavailable — match the model response shape
-    score = random.randint(60, 90)
+    # Model not loaded
     return {
         "service": "skin",
-        "score": score,
-        "details": {
-            "acne": {
-                "classification": "Unknown",
-                "severity_score": round((1 - score / 100) * 10, 1),
-                "confidence": 0.0,
-                "score": score,
-            },
-        },
+        "score": None,
+        "error": "Skin model not loaded. Ensure the checkpoint exists and run 'git lfs pull'.",
     }
 
 

@@ -144,3 +144,63 @@ async def debug_analyze(request: DebugAnalyzeRequest = None):
         "errors": ml_results.errors,
         "timing_ms": elapsed_ms
     }
+
+
+# =============================================================================
+# INDIVIDUAL SERVICE ENDPOINTS
+# =============================================================================
+
+class SingleServiceRequest(BaseModel):
+    image: Optional[str] = None  # base64-encoded JPEG from frontend webcam
+
+
+@router.post("/debug/eyes")
+async def debug_eye_analysis(request: SingleServiceRequest = None):
+    """Run eye strain analysis only via Jetson eye service."""
+    import time
+    import httpx
+
+    start_time = time.time()
+    image = request.image if request else None
+
+    # Use the full orchestrator which captures an image and calls all services,
+    # then extract only the eye results
+    client = JetsonClient()
+    ml_results = await client.run_full_analysis(image=image)
+
+    elapsed_ms = (time.time() - start_time) * 1000
+
+    return {
+        "success": ml_results.eye_score is not None,
+        "score": ml_results.eye_score,
+        "details": ml_results.eye_details,
+        "captured_image": ml_results.captured_image,
+        "errors": [e for e in ml_results.errors if "eyes" in e.lower()] if ml_results.errors else [],
+        "timing_ms": elapsed_ms,
+    }
+
+
+@router.post("/debug/skin")
+async def debug_skin_analysis(request: SingleServiceRequest = None):
+    """Run skin analysis only via Jetson skin service."""
+    import time
+    import httpx
+
+    start_time = time.time()
+    image = request.image if request else None
+
+    # Use the full orchestrator which captures an image and calls all services,
+    # then extract only the skin results
+    client = JetsonClient()
+    ml_results = await client.run_full_analysis(image=image)
+
+    elapsed_ms = (time.time() - start_time) * 1000
+
+    return {
+        "success": ml_results.skin_score is not None,
+        "score": ml_results.skin_score,
+        "details": ml_results.skin_details,
+        "captured_image": ml_results.captured_image,
+        "errors": [e for e in ml_results.errors if "skin" in e.lower()] if ml_results.errors else [],
+        "timing_ms": elapsed_ms,
+    }
