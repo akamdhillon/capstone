@@ -41,9 +41,9 @@ def ensure_singleton():
 _singleton_lock = ensure_singleton()
 
 # Config
-BACKEND_URL = os.environ.get("BACKEND_URL")
-BACKEND_FACE_URL = os.environ.get("BACKEND_FACE_URL")
-
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000/voice/intent")
+BACKEND_FACE_URL = os.environ.get("BACKEND_FACE_URL", "http://localhost:8000/api/face/recognize")
+FACE_CONFIDENCE_THRESHOLD = 0.6  # Akam's suggested threshold
 
 
 # Initialize local TTS
@@ -62,20 +62,22 @@ def report_status(state: str, user_id: Optional[str] = None, display_name: Optio
         url = "http://localhost:8000/api/voice/status"
         payload = {
             "state": state,
-            "user_id": user_id if user_id else "unknown",
-            "display_name": display_name if display_name else "Unknown User"
+            "user_id": user_id if user_id else "guest",
+            "display_name": display_name if display_name else "Guest"
         }
         httpx.post(url, json=payload, timeout=2.0)
     except Exception as e:
         logger.debug(f"Failed to report status: {e}")
 
-def capture_and_recognize() -> tuple[Optional[str], Optional[str]]:
-    """Capture a camera frame and identify the user via face recognition."""
+def capture_and_recognize() -> tuple[str, str]:
+    """Capture a camera frame and identify the user via face recognition.
+    Returns (user_id, display_name).
+    """
     try:
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
-            logger.warning("Camera not available, using default user.")
-            return "nikunj", "Nikunj"
+            logger.warning("Camera not available, treating as guest.")
+            return "guest", "Guest"
         
         # Let the camera warm up
         time.sleep(0.5)
@@ -83,8 +85,8 @@ def capture_and_recognize() -> tuple[Optional[str], Optional[str]]:
         cap.release()
         
         if not ret or frame is None:
-            logger.warning("Failed to capture frame, using default user.")
-            return "nikunj", "Nikunj"
+            logger.warning("Failed to capture frame, treating as guest.")
+            return "guest", "Guest"
         
         # Encode frame to base64 JPEG
         _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
@@ -97,22 +99,27 @@ def capture_and_recognize() -> tuple[Optional[str], Optional[str]]:
         if res.status_code == 200:
             data = res.json()
             if data.get("match"):
-                name = data.get("name", "Unknown")
-                user_id = data.get("user_id", "unknown")
+                name = data.get("name", "Guest")
+                user_id = data.get("user_id", "guest")
                 confidence = data.get("confidence", 0)
-                logger.info(f"Face recognized: {name} (confidence: {confidence:.2f})")
-                return user_id, name
+                
+                if confidence >= FACE_CONFIDENCE_THRESHOLD:
+                    logger.info(f"Face recognized: {name} (confidence: {confidence:.2f})")
+                    return user_id, name
+                else:
+                    logger.info(f"Face matched {name} but confidence {confidence:.2f} < {FACE_CONFIDENCE_THRESHOLD}. Treating as Guest.")
+                    return "guest", "Guest"
             else:
                 match_type = data.get("match_type", "unknown")
-                logger.info(f"Face not recognized (type: {match_type})")
-                return None, None
+                logger.info(f"Face not recognized (type: {match_type}). Treating as Guest.")
+                return "guest", "Guest"
         else:
             logger.warning(f"Face service returned {res.status_code}")
-            return "nikunj", "Nikunj"
+            return "guest", "Guest"
             
     except Exception as e:
         logger.debug(f"Face recognition failed: {e}")
-        return "nikunj", "Nikunj"  # Default fallback for testing
+        return "guest", "Guest"
 
 def record_audio(sample_rate=16000, silence_threshold=500, silence_duration=1.5, max_duration=30) -> str:
     """Record audio until the user stops talking (VAD-based).
@@ -264,11 +271,11 @@ def main():
                 # 1. Identify User via camera
                 user_id, display_name = capture_and_recognize()
                 
-                if user_id is None:
-                    # Not recognized — greet and ask to enroll
-                    logger.info("User not recognized.")
+                if user_id == "guest":
+                    # Not recognized or low confidence — greet and ask to enroll
+                    logger.info("User treated as guest.")
                     play_tts("I don't recognize you. Please enroll first using the mirror display.")
-                    report_status("IDLE")
+                    report_status("IDLE", "guest", "Guest")
                     last_state = "IDLE"
                     logger.info("Resuming wake word listening...")
                     continue
