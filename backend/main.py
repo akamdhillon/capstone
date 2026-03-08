@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from config import settings
-from routes import analysis, face
+from routes import analysis, face, llm_voice
 import voice_orchestrator
 from voice_listener import VoiceListener
 
@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Thermal hardware: {'ENABLED' if settings.THERMAL_ENABLED else 'DISABLED'}")
     logger.info(f"Scoring weights: {settings.weights}")
 
-    # Start voice listener (mic → Vosk → orchestrator → TTS)
+    # Start voice listener (mic -> Vosk -> orchestrator -> TTS)
     loop = asyncio.get_running_loop()
     _voice_listener = VoiceListener(ws_manager=manager, event_loop=loop)
     _voice_listener.start()
@@ -108,6 +108,7 @@ app.add_middleware(
 # Include routers
 app.include_router(analysis.router, prefix="/api", tags=["Analysis"])
 app.include_router(face.router, prefix="/api", tags=["Face"])
+app.include_router(llm_voice.router, prefix="/api/voice_old", tags=["Voice Old"])
 app.include_router(voice_orchestrator.router, prefix="/voice", tags=["Voice"])
 
 
@@ -119,6 +120,7 @@ async def voice_websocket(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
+            # Keep connection alive
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
@@ -186,6 +188,7 @@ async def save_posture_result(result: PostureResultData):
     entry["timestamp"] = datetime.datetime.now().isoformat()
     history.append(entry)
 
+    # Keep last 100 results
     if len(history) > 100:
         history = history[-100:]
 

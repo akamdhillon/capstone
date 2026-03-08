@@ -1,35 +1,314 @@
+"""
+Clarity+ Posture Service
+========================
+Real-time posture analysis using MediaPipe Pose.
+Captures frames from camera, calculates neck/torso angles,
+and returns structured posture assessment results.
+
+Runs on Jetson Nano (port 8004) or Mac (CPU) for testing.
+"""
+
+import os
+import time
+import math
+import logging
+from dataclasses import dataclass, asdict
+from collections import deque
+from typing import Optional
+
+import cv2
+import numpy as np
+import mediapipe as mp
 from fastapi import FastAPI
 from pydantic import BaseModel
-import logging
-import random
 
-app = FastAPI()
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("service.posture")
 
-class AnalysisRequest(BaseModel):
-    image_path: str
+# ---------------------------------------------------------------------------
+# FastAPI app
+# ---------------------------------------------------------------------------
+app = FastAPI(title="Clarity+ Posture Service")
 
-@app.post("/analyze")
-async def analyze(request: AnalysisRequest):
-    logger.info(f"Analyzing posture for: {request.image_path}")
-    
-    # TODO: Add Posture Analysis Logic here
-    # 1. Load image from request.image_path
-    # 2. Run MediaPipe Pose
-    # 3. Calculate metrics
-    
-    # Dummy score
-    score = random.randint(70, 100)
-    
+
+# ---------------------------------------------------------------------------
+# Calibrated Configuration
+# ---------------------------------------------------------------------------
+class PostureConfig:
+    """
+    Calibrated thresholds for side-view posture analysis.
+    - Neck: ear-to-shoulder angle from vertical
+    - Torso: shoulder-to-hip angle from vertical
+    """
+    NECK_GOOD = 8.0
+    NECK_MODERATE = 12.0
+    NECK_POOR = 18.0
+
+    TORSO_GOOD = 5.0
+    TORSO_MODERATE = 8.0
+    TORSO_POOR = 12.0
+
+    COMBINED_GOOD_NECK = 8.0
+    COMBINED_GOOD_TORSO = 5.0
+
+    SMOOTHING_WINDOW = 10
+    CAPTURE_DURATION = 5  # seconds (shortened for voice UX)
+    ALIGNMENT_THRESHOLD_PERCENT = 0.15
+
+
+config = PostureConfig()
+
+
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
+class AnalysisRequest(BaseModel):
+    image_path: str = ""  # Legacy compat (orchestrator sends this)
+    user_id: str = "unknown"
+
+
+class RunPostureRequest(BaseModel):
+    user_id: str = "unknown"
+
+
+# ---------------------------------------------------------------------------
+# MediaPipe Setup (loaded once)
+# ---------------------------------------------------------------------------
+mp_pose = mp.solutions.pose
+pose_detector: Optional[mp.solutions.pose.Pose] = None
+
+
+@app.on_event("startup")
+def load_models():
+    global pose_detector
+    logger.info("Loading MediaPipe Pose model...")
+    t0 = time.time()
+    pose_detector = mp_pose.Pose(
+        static_image_mode=False,
+        model_complexity=1,
+        min_detection_confidence=0.5,
+        min_tracking_confidence=0.5,
+    )
+    logger.info(f"Pose model loaded in {time.time() - t0:.1f}s")
+
+
+# ---------------------------------------------------------------------------
+# Health
+# ---------------------------------------------------------------------------
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "posture", "model_loaded": pose_detector is not None}
+
+
+# ---------------------------------------------------------------------------
+# Core Posture Analysis Functions
+# ---------------------------------------------------------------------------
+def calculate_angle(x1, y1, x2, y2):
+    """Calculate angle from vertical (degrees). Measures forward lean."""
+    dx = abs(x2 - x1)
+    dy = abs(y2 - y1)
+    if dy < 1e-6:
+        return 0.0
+    return np.degrees(np.arctan(dx / dy))
+
+
+def find_distance(x1, y1, x2, y2):
+    """Euclidean distance between two points."""
+    return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+
+def assess_status(angle, good_thresh, mod_thresh):
+    """Classify angle into good/moderate/poor."""
+    if angle < good_thresh:
+        return "good"
+    elif angle < mod_thresh:
+        return "moderate"
+    else:
+        return "poor"
+
+
+def analyze_frame(landmarks, w, h):
+    """
+    Analyze a single frame's pose landmarks.
+    Returns (neck_angle, torso_angle) or None if landmarks insufficient.
+    """
+    lm = landmarks
+    lmPose = mp_pose.PoseLandmark
+
+    l_shldr_x = int(lm[lmPose.LEFT_SHOULDER].x * w)
+    l_shldr_y = int(lm[lmPose.LEFT_SHOULDER].y * h)
+    r_shldr_x = int(lm[lmPose.RIGHT_SHOULDER].x * w)
+    r_shldr_y = int(lm[lmPose.RIGHT_SHOULDER].y * h)
+    l_ear_x = int(lm[lmPose.LEFT_EAR].x * w)
+    l_ear_y = int(lm[lmPose.LEFT_EAR].y * h)
+    l_hip_x = int(lm[lmPose.LEFT_HIP].x * w)
+    l_hip_y = int(lm[lmPose.LEFT_HIP].y * h)
+
+    neck_angle = calculate_angle(l_shldr_x, l_shldr_y, l_ear_x, l_ear_y)
+    torso_angle = calculate_angle(l_hip_x, l_hip_y, l_shldr_x, l_shldr_y)
+
+    return neck_angle, torso_angle
+
+
+def run_posture_analysis(duration_sec: int = 5) -> dict:
+    """
+    Run a timed posture analysis session using the camera.
+    Captures frames for `duration_sec`, analyzes each, returns aggregated result.
+    """
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        logger.error("Camera not available")
+        return {"error": "Camera not available", "score": 0}
+
+    neck_angles = deque(maxlen=config.SMOOTHING_WINDOW * 10)
+    torso_angles = deque(maxlen=config.SMOOTHING_WINDOW * 10)
+    frame_count = 0
+    start = time.time()
+
+    logger.info(f"Starting {duration_sec}s posture capture...")
+
+    try:
+        while (time.time() - start) < duration_sec:
+            ret, frame = cap.read()
+            if not ret:
+                continue
+
+            h, w, _ = frame.shape
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            result = pose_detector.process(rgb)
+
+            if result.pose_landmarks:
+                angles = analyze_frame(result.pose_landmarks.landmark, w, h)
+                if angles:
+                    neck_angles.append(angles[0])
+                    torso_angles.append(angles[1])
+                    frame_count += 1
+    finally:
+        cap.release()
+
+    elapsed = time.time() - start
+    logger.info(f"Captured {frame_count} frames in {elapsed:.1f}s")
+
+    if frame_count < 3:
+        return {
+            "error": "Not enough frames with visible pose",
+            "score": 0,
+            "frames_analyzed": frame_count,
+        }
+
+    # Aggregate results
+    neck_median = float(np.median(list(neck_angles)))
+    torso_median = float(np.median(list(torso_angles)))
+
+    neck_status = assess_status(neck_median, config.NECK_GOOD, config.NECK_MODERATE)
+    torso_status = assess_status(torso_median, config.TORSO_GOOD, config.TORSO_MODERATE)
+
+    # Build recommendations
+    recommendations = []
+    if neck_status in ("moderate", "poor"):
+        recommendations.append("Forward head detected - practice chin tucks")
+        recommendations.append("Check screen height (should be at eye level)")
+    if torso_status in ("moderate", "poor"):
+        recommendations.append("Slouching detected - sit or stand more upright")
+        recommendations.append("Engage core muscles and retract shoulder blades")
+
+    # Overall status (BOTH must be good)
+    if neck_median < config.COMBINED_GOOD_NECK and torso_median < config.COMBINED_GOOD_TORSO:
+        overall = "good"
+        score = 90 + int(min(10, (config.COMBINED_GOOD_NECK - neck_median) * 2))
+        message = "Excellent posture! Keep it up."
+    elif neck_status == "poor" or torso_status == "poor":
+        overall = "poor"
+        score = max(20, 50 - int(max(neck_median - config.NECK_MODERATE, torso_median - config.TORSO_MODERATE) * 2))
+        message = "Poor posture detected. Please correct your alignment."
+    else:
+        overall = "moderate"
+        score = 60 + int(min(20, (config.NECK_MODERATE - neck_median) + (config.TORSO_MODERATE - torso_median)))
+        message = "Moderate posture. Small corrections would help."
+
+    score = max(0, min(100, score))
+
     return {
         "service": "posture",
         "score": score,
-        "details": {
-            "head_tilt": "15 deg",
-            "shoulder_alignment": "OK"
-        }
+        "status": overall,
+        "message": message,
+        "neck": {
+            "angle": round(neck_median, 1),
+            "status": neck_status,
+        },
+        "torso": {
+            "angle": round(torso_median, 1),
+            "status": torso_status,
+        },
+        "recommendations": recommendations,
+        "frames_analyzed": frame_count,
+        "duration_seconds": round(elapsed, 1),
     }
 
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/posture/run")
+async def run_posture(request: RunPostureRequest):
+    """Voice-triggered posture check. Captures from camera and analyzes."""
+    logger.info(f"Posture check requested for user: {request.user_id}")
+    result = run_posture_analysis(duration_sec=config.CAPTURE_DURATION)
+    return result
+
+
+@app.post("/analyze")
+async def analyze(request: AnalysisRequest):
+    """Legacy endpoint for orchestrator compatibility."""
+    logger.info(f"Analyze posture for: {request.image_path or 'camera'}")
+
+    # If an image_path is provided, analyze that single frame
+    if request.image_path and os.path.exists(request.image_path):
+        img = cv2.imread(request.image_path)
+        if img is not None:
+            h, w, _ = img.shape
+            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            result = pose_detector.process(rgb)
+
+            if result.pose_landmarks:
+                angles = analyze_frame(result.pose_landmarks.landmark, w, h)
+                if angles:
+                    neck_status = assess_status(angles[0], config.NECK_GOOD, config.NECK_MODERATE)
+                    torso_status = assess_status(angles[1], config.TORSO_GOOD, config.TORSO_MODERATE)
+
+                    if neck_status == "good" and torso_status == "good":
+                        score = 90
+                    elif neck_status == "poor" or torso_status == "poor":
+                        score = 40
+                    else:
+                        score = 65
+
+                    return {
+                        "service": "posture",
+                        "score": score,
+                        "details": {
+                            "neck_angle": round(angles[0], 1),
+                            "torso_angle": round(angles[1], 1),
+                            "neck_status": neck_status,
+                            "torso_status": torso_status,
+                        }
+                    }
+
+        return {"service": "posture", "score": 50, "details": {"error": "Could not analyze image"}}
+
+    # Fallback: run a live camera analysis
+    result = run_posture_analysis(duration_sec=config.CAPTURE_DURATION)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Entrypoint
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8004)
