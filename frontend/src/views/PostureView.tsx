@@ -43,7 +43,7 @@ interface PostureResult {
     framesAnalyzed: number;
 }
 
-async function savePostureResult(result: PostureResult) {
+async function savePostureResult(result: PostureResult, userId?: string | null) {
     try {
         await fetch(`${API_BASE_URL}/api/posture/results`, {
             method: 'POST',
@@ -57,6 +57,7 @@ async function savePostureResult(result: PostureResult) {
                 torso_status: result.torsoStatus,
                 recommendations: result.recommendations,
                 frames_analyzed: result.framesAnalyzed,
+                user_id: userId ?? null,
             }),
         });
     } catch (e) {
@@ -159,8 +160,8 @@ export function PostureView() {
 
         setResult(postureResult);
         setPhase('results');
-        savePostureResult(postureResult);
-    }, []);
+        savePostureResult(postureResult, currentUser?.id);
+    }, [currentUser?.id]);
 
     const runDetection = useCallback(() => {
         const video = videoRef.current;
@@ -300,8 +301,11 @@ export function PostureView() {
     }, [phase, goHome]);
 
     useVoiceWebSocket(useCallback((data) => {
-        if (data.navigate === 'idle') goHome();
-    }, [goHome]));
+        if (data.navigate === 'idle') {
+            cleanup();
+            setView('idle');
+        }
+    }, [cleanup, setView]));
 
     const progress = phase === 'capturing' ? ((CAPTURE_DURATION - timeLeft) / CAPTURE_DURATION) * 100 : 0;
 

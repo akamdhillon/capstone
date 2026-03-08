@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { useVoiceWebSocket } from '../hooks/useVoiceWebSocket';
-import { triggerDebugAnalysis } from '../services/api';
+import { CapturePhase } from '../components/CapturePhase';
+import { triggerDebugAnalysis, saveEyeResult, saveThermalResult } from '../services/api';
 import { CircularProgress } from '../components/ui/CircularProgress';
 
 const AUTO_RETURN_SECONDS = 30;
@@ -12,26 +13,41 @@ export function AnalysisView() {
         setScores, currentUser, webcamFrame, setWebcamFrame,
     } = useApp();
 
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [countdown, setCountdown] = useState(AUTO_RETURN_SECONDS);
     const [skinDetails, setSkinDetails] = useState<Record<string, unknown> | null>(null);
+    const needsCapture = webcamFrame === null;
 
     useEffect(() => {
+        if (!webcamFrame) return;
+        let cancelled = false;
         const performAnalysis = async () => {
+            setIsLoading(true);
             try {
-                const result = await triggerDebugAnalysis(webcamFrame ?? undefined);
-                setScores(result.scores, result.overall_score, result.captured_image);
-                setSkinDetails((result.details?.skin as Record<string, unknown>) ?? null);
+                const result = await triggerDebugAnalysis(webcamFrame);
+                if (!cancelled) {
+                    setScores(result.scores, result.overall_score, result.captured_image);
+                    setSkinDetails((result.details?.skin as Record<string, unknown>) ?? null);
+                    if (result.scores?.eyes != null) {
+                        saveEyeResult(result.scores.eyes, result.details?.eyes as Record<string, unknown> | undefined, currentUser?.id ?? undefined).catch(() => {});
+                    }
+                    if (result.scores?.thermal != null) {
+                        saveThermalResult(result.scores.thermal, result.details?.thermal as Record<string, unknown> | undefined, currentUser?.id ?? undefined).catch(() => {});
+                    }
+                }
             } catch (err) {
                 console.error('Analysis failed:', err);
-                setError('Analysis unavailable');
+                if (!cancelled) setError('Analysis unavailable');
             } finally {
-                setWebcamFrame(null);
-                setIsLoading(false);
+                if (!cancelled) {
+                    setWebcamFrame(null);
+                    setIsLoading(false);
+                }
             }
         };
         performAnalysis();
+        return () => { cancelled = true; };
     }, [currentUser, setScores, webcamFrame, setWebcamFrame]);
 
     // Auto-return countdown
@@ -71,7 +87,13 @@ export function AnalysisView() {
 
     return (
         <div className="min-h-screen bg-black flex flex-col items-center justify-center p-8 select-none">
-            {isLoading ? (
+            {needsCapture ? (
+                <CapturePhase
+                    onCapture={setWebcamFrame}
+                    label="Position yourself in frame"
+                    sublabel="Full wellness scan will capture automatically"
+                />
+            ) : isLoading ? (
                 <div className="flex flex-col items-center animate-fade-in">
                     <div className="relative w-20 h-20 mb-6">
                         <div className="absolute inset-0 rounded-full border-2 border-white/10" />

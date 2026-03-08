@@ -100,14 +100,14 @@ Say "Hey Clarity" followed by any command below. You can also say the wake word 
 
 ## Requirements
 
-- **Python 3.10+** with `vosk`, `pyaudio`, and `pyttsx3` installed (via `requirements.txt`)
+- **Python 3.10+** with `vosk`, `sounddevice`, and `pyttsx3` installed (via `requirements.txt`)
 - Microphone accessible to the Mac or Raspberry Pi running the backend
 - Backend must be running on port 8000 with Ollama serving `llama3.2:1b`
 - Vosk model auto-downloads on first run (~50 MB)
 
 ## Troubleshooting
 
-- **"Failed to open microphone"**: Check that `pyaudio` is installed and the mic is not in use by another app. On Mac, you may need to grant Terminal/IDE microphone permission in System Preferences → Privacy.
+- **"Failed to open microphone"**: Check that `sounddevice` is installed and the mic is not in use by another app. On Mac, you may need to grant Terminal/IDE microphone permission in System Preferences → Privacy.
 - **"Vosk model not found"**: The model auto-downloads on first run. If it fails, manually download `vosk-model-small-en-us-0.15` from https://alphacephei.com/vosk/models and extract to `backend/vosk-model/`.
 - **"Hey Clarity" not recognized**: Speak clearly, pause briefly after the wake word. Check backend logs for recognized text.
 - **No voice response**: Ensure `pyttsx3` is working — run `python -c "import pyttsx3; e=pyttsx3.init(); e.say('test'); e.runAndWait()"` to test.

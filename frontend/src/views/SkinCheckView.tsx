@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { useVoiceWebSocket } from '../hooks/useVoiceWebSocket';
+import { CapturePhase } from '../components/CapturePhase';
 import { triggerSkinAnalysis, type SingleServiceResult } from '../services/api';
 
 const AUTO_RETURN_SECONDS = 20;
@@ -8,25 +9,32 @@ const AUTO_RETURN_SECONDS = 20;
 export function SkinCheckView() {
     const { setView, currentUser, webcamFrame, setWebcamFrame } = useApp();
 
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [result, setResult] = useState<SingleServiceResult | null>(null);
     const [countdown, setCountdown] = useState(AUTO_RETURN_SECONDS);
+    const needsCapture = webcamFrame === null;
 
     useEffect(() => {
+        if (!webcamFrame) return;
+        let cancelled = false;
         const runAnalysis = async () => {
+            setIsLoading(true);
             try {
-                const data = await triggerSkinAnalysis(webcamFrame ?? undefined);
-                setResult(data);
+                const data = await triggerSkinAnalysis(webcamFrame);
+                if (!cancelled) setResult(data);
             } catch (err) {
                 console.error('Skin analysis failed:', err);
-                setError('Skin analysis unavailable');
+                if (!cancelled) setError('Skin analysis unavailable');
             } finally {
-                setWebcamFrame(null);
-                setIsLoading(false);
+                if (!cancelled) {
+                    setWebcamFrame(null);
+                    setIsLoading(false);
+                }
             }
         };
         runAnalysis();
+        return () => { cancelled = true; };
     }, [webcamFrame, setWebcamFrame]);
 
     // Auto-return countdown
@@ -77,7 +85,13 @@ export function SkinCheckView() {
 
     return (
         <div className="min-h-screen bg-black flex flex-col items-center justify-center p-8 select-none">
-            {isLoading ? (
+            {needsCapture ? (
+                <CapturePhase
+                    onCapture={setWebcamFrame}
+                    label="Position your face in frame"
+                    sublabel="Skin analysis will capture automatically"
+                />
+            ) : isLoading ? (
                 <div className="flex flex-col items-center animate-fade-in">
                     <div className="relative w-20 h-20 mb-6">
                         <div className="absolute inset-0 rounded-full border-2 border-white/10" />

@@ -219,6 +219,8 @@ export interface DailySummary {
         [key: string]: unknown;
     } | null;
     trend: 'improving' | 'declining' | 'stable' | 'no_data';
+    latest_eye?: { score: number; details?: Record<string, unknown>; timestamp?: string } | null;
+    latest_thermal?: { score: number; details?: Record<string, unknown>; timestamp?: string } | null;
 }
 
 export interface PostureResultEntry {
@@ -240,8 +242,27 @@ export async function getDailySummary(userId?: string): Promise<DailySummary> {
     return response.json();
 }
 
-export async function getPostureResults(): Promise<PostureResultEntry[]> {
-    const response = await fetch(`${API_BASE_URL}/api/posture/results`);
+export async function saveEyeResult(score: number, details?: Record<string, unknown>, userId?: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/api/eyes/results`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ score, details: details ?? null, user_id: userId ?? null }),
+    });
+    if (!response.ok) throw new Error('Failed to save eye result');
+}
+
+export async function saveThermalResult(score: number, details?: Record<string, unknown>, userId?: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/api/thermal/results`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ score, details: details ?? null, user_id: userId ?? null }),
+    });
+    if (!response.ok) throw new Error('Failed to save thermal result');
+}
+
+export async function getPostureResults(userId?: string): Promise<PostureResultEntry[]> {
+    const params = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+    const response = await fetch(`${API_BASE_URL}/api/posture/results${params}`);
     if (!response.ok) throw new Error('Failed to fetch posture results');
     return response.json();
 }

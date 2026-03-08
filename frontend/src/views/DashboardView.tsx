@@ -18,7 +18,7 @@ export function DashboardView() {
             try {
                 const [summaryData, postureData] = await Promise.all([
                     getDailySummary(currentUser?.id).catch(() => null),
-                    getPostureResults().catch(() => []),
+                    getPostureResults(currentUser?.id).catch(() => []),
                 ]);
                 setSummary(summaryData);
                 if (postureData.length > 0) {
@@ -121,14 +121,14 @@ export function DashboardView() {
                     />
                     <ScoreCard
                         label="Eyes"
-                        score={null}
+                        score={summary?.latest_eye?.score ?? null}
                         sublabel="Strain check"
                     />
                     <ScoreCard
                         label="Thermal"
-                        score={null}
+                        score={summary?.latest_thermal?.score ?? null}
                         sublabel="Face scan"
-                        disabled
+                        disabled={summary?.latest_thermal?.score == null}
                     />
                 </div>
 

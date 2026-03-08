@@ -17,7 +17,8 @@ router = APIRouter()
 
 _THIS_DIR = Path(__file__).resolve().parent
 
-JETSON_BASE_URL = f"http://{settings.JETSON_IP}:8001"
+JETSON_ORCHESTRATOR_URL = f"http://{settings.JETSON_IP}:8001"
+BACKEND_URL = settings.BACKEND_BASE_URL
 
 class VoiceMessage(BaseModel):
     role: str
@@ -49,51 +50,49 @@ except FileNotFoundError:
     SYSTEM_PROMPT = "You are a helpful wellness assistant. Always output JSON."
 
 async def _execute_jetson_action(action_name: str, params: dict, user_id: str) -> dict:
-    url_map = {
-        "run_posture_check": f"{JETSON_BASE_URL}/posture/run",
-        "run_acne_check": f"{JETSON_BASE_URL}/skin/run",
-        "run_eye_strain_check": f"{JETSON_BASE_URL}/eyes/run",
-        "run_thermal_scan": f"{JETSON_BASE_URL}/thermal/run",
+    # Use backend API (which proxies to Jetson orchestrator /analyze) for analysis
+    backend_map = {
+        "run_posture_check": f"{BACKEND_URL}/api/debug/analyze",
+        "run_acne_check": f"{BACKEND_URL}/api/debug/skin",
+        "run_eye_strain_check": f"{BACKEND_URL}/api/debug/eyes",
+        "run_thermal_scan": f"{BACKEND_URL}/api/debug/analyze",
     }
-    
+
     if action_name == "get_daily_summary":
         try:
-            async with httpx.AsyncClient() as client:
-                res = await client.get("http://localhost:8000/api/summary", params={"user_id": user_id})
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.get(f"{BACKEND_URL}/api/summary", params={"user_id": user_id})
                 return res.json() if res.status_code == 200 else {"error": "Failed to fetch summary"}
         except Exception as e:
-             return {"error": str(e)}
+            return {"error": str(e)}
 
-    url = url_map.get(action_name)
+    url = backend_map.get(action_name)
     if not url:
         return {"error": f"Unknown action: {action_name}"}
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            payload = params.copy()
-            if "user_id" not in payload and user_id:
-                payload["user_id"] = user_id
-                
+            payload = {"image": params.get("image")} if "image" in params else {}
             response = await client.post(url, json=payload)
             response.raise_for_status()
             return response.json()
     except Exception as e:
-        logger.error(f"Failed Jetson call for {action_name}: {e}")
+        logger.error(f"Failed backend call for {action_name}: {e}")
         return {"error": str(e)}
 
 async def _handle_broadcasts(intent: str, actions_run: list):
     """Send navigation and action broadcasts based on the resolved intent."""
     async def _broadcast_nav(view_name: str):
         try:
-            async with httpx.AsyncClient() as client:
-                await client.post("http://localhost:8000/api/navigate", json={"view": view_name})
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(f"{BACKEND_URL}/api/navigate", json={"view": view_name})
         except Exception:
             pass
 
     async def _broadcast_action(action_name: str):
         try:
-            async with httpx.AsyncClient() as client:
-                await client.post("http://localhost:8000/api/action", json={"action": action_name})
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(f"{BACKEND_URL}/api/action", json={"action": action_name})
         except Exception:
             pass
 
@@ -172,6 +171,10 @@ async def process_voice_intent(request: VoiceIntentRequest):
         (["run full scan", "full wellness scan", "full scan", "analyze my wellness", "full analysis",
           "complete scan", "check everything"],
          "FULL_ANALYSIS", "Starting full wellness scan now."),
+        # Posture history (past scores) - must come before POSTURE_CHECK
+        (["what was my last posture score", "show my latest posture", "my last posture score",
+          "last posture result", "previous posture score", "latest posture"],
+         "POSTURE_HISTORY", None),
         # Posture check
         (["check my posture", "analyze my posture", "posture analysis", "how's my posture", "posture check",
           "posture results", "show my posture", "my posture results"],
@@ -210,6 +213,23 @@ async def process_voice_intent(request: VoiceIntentRequest):
                 else:
                     det_message = "I don't recognize you yet. Would you like to enroll your face?"
                     det_intent = "ENROLL_USER"
+
+            # POSTURE_HISTORY: fetch latest posture for user and build message
+            if det_intent == "POSTURE_HISTORY":
+                try:
+                    async with httpx.AsyncClient(timeout=5.0) as client:
+                        res = await client.get(f"{BACKEND_URL}/api/posture/results", params={"user_id": request.user_id or ""})
+                        history = res.json() if res.status_code == 200 else []
+                    if history:
+                        latest = history[-1]
+                        score = latest.get("score", 0)
+                        status = latest.get("status", "unknown")
+                        det_message = f"Your latest posture score was {score} out of 100, with {status} posture."
+                    else:
+                        det_message = "You don't have any posture results yet. Say 'check my posture' to run an analysis."
+                except Exception as e:
+                    logger.error(f"Failed to fetch posture history: {e}")
+                    det_message = "I couldn't retrieve your posture history. Try again later."
             
             # Execute any actions tied to deterministic intents
             actions_run = []

@@ -149,10 +149,12 @@ class VoiceListener:
         except Exception:
             pass
 
-    def _set_state(self, state: str, caption: Optional[str] = None):
+    def _set_state(self, state: str, caption: Optional[str] = None, transcript: Optional[str] = None):
         msg = {"state": state}
         if caption:
             msg["caption"] = caption
+        if transcript:
+            msg["transcript"] = transcript
         self._broadcast(msg)
 
     # -- Audio callback for sounddevice --
@@ -262,14 +264,14 @@ class VoiceListener:
 
             if after:
                 # Wake word + command in the same utterance
-                self._process_command(after)
+                self._process_command(after, raw_text=text)
             else:
                 # Wake word only — listen for the command
                 self._set_state("LISTENING")
                 logger.info("Listening for command...")
                 command = self._capture_command(recognizer)
                 if command:
-                    self._process_command(command)
+                    self._process_command(command, raw_text=command)
                 else:
                     logger.info("No command heard, returning to idle")
                     self._set_state("IDLE")
@@ -323,10 +325,11 @@ class VoiceListener:
             return cleaned if cleaned else text
         return None
 
-    def _process_command(self, command: str):
+    def _process_command(self, command: str, raw_text: Optional[str] = None):
         """Send command through the voice orchestrator and speak the response."""
         logger.info(f"Processing command: '{command}'")
-        self._set_state("PROCESSING")
+        transcript = raw_text or command
+        self._set_state("PROCESSING", transcript=transcript)
 
         try:
             # Import here to avoid circular imports
@@ -349,12 +352,12 @@ class VoiceListener:
             logger.info(f"Intent: {response.intent}, Message: {assistant_msg}")
 
             if assistant_msg:
-                self._set_state("SPEAKING", assistant_msg)
+                self._set_state("SPEAKING", assistant_msg, transcript=transcript)
                 _speak(assistant_msg)
 
         except Exception as e:
             logger.error(f"Command processing failed: {e}")
-            self._set_state("SPEAKING", "Sorry, I had trouble with that.")
+            self._set_state("SPEAKING", "Sorry, I had trouble with that.", transcript=transcript)
             _speak("Sorry, I had trouble with that.")
 
         self._set_state("IDLE")

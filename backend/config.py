@@ -13,10 +13,12 @@ env_path = Path(__file__).resolve().parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
 class Settings:
-    # Network
+    # Network — set JETSON_IP and RPI_IP in .env (comment/uncomment Mac vs Prod block)
     JETSON_IP = os.getenv("JETSON_IP")
     RPI_IP = os.getenv("RPI_IP")
-    
+    # Backend base URL for self-calls (voice orchestrator, navigate); uses RPI_IP
+    BACKEND_BASE_URL = f"http://{os.getenv('RPI_IP')}:8000" if os.getenv("RPI_IP") else None
+
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///data/clarity.db")
     
     # Feature Toggles

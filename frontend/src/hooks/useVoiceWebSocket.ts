@@ -7,6 +7,7 @@ export interface VoiceMessage {
     state?: string;
     display_name?: string;
     caption?: string;
+    transcript?: string;
     greeting?: string;
     [key: string]: unknown;
 }
@@ -76,13 +77,18 @@ export function useVoiceState() {
     const [voiceState, setVoiceState] = useState<string>('IDLE');
     const [displayName, setDisplayName] = useState('');
     const [caption, setCaption] = useState<string | null>(null);
+    const [transcript, setTranscript] = useState<string | null>(null);
 
     useVoiceWebSocket(useCallback((data: VoiceMessage) => {
         if (data.state) setVoiceState(data.state as string);
         if (data.display_name) setDisplayName(data.display_name as string);
         if (typeof data.caption === 'string') setCaption(data.caption);
-        if (data.state === 'IDLE') setCaption(null);
+        if (typeof data.transcript === 'string') setTranscript(data.transcript);
+        if (data.state === 'IDLE') {
+            setCaption(null);
+            setTranscript(null);
+        }
     }, []));
 
-    return { voiceState, displayName, caption };
+    return { voiceState, displayName, caption, transcript };
 }

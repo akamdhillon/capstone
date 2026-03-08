@@ -157,9 +157,11 @@ async def broadcast_action(command: ActionCommand):
     return {"status": "ok", "action": command.action}
 
 
-# --- Posture Results Storage ---
-
-POSTURE_RESULTS_FILE = Path(__file__).resolve().parent / "data" / "posture_results.json"
+# --- Results Storage ---
+_DATA_DIR = Path(__file__).resolve().parent / "data"
+POSTURE_RESULTS_FILE = _DATA_DIR / "posture_results.json"
+EYE_RESULTS_FILE = _DATA_DIR / "eye_results.json"
+THERMAL_RESULTS_FILE = _DATA_DIR / "thermal_results.json"
 
 class PostureResultData(BaseModel):
     score: int
@@ -170,6 +172,7 @@ class PostureResultData(BaseModel):
     torso_status: str
     recommendations: List[str] = []
     frames_analyzed: int = 0
+    user_id: Optional[str] = None
 
 @app.post("/api/posture/results")
 async def save_posture_result(result: PostureResultData):
@@ -197,25 +200,106 @@ async def save_posture_result(result: PostureResultData):
     return {"status": "ok", "total_results": len(history)}
 
 @app.get("/api/posture/results")
-async def get_posture_results():
-    """Get posture assessment history."""
-    if POSTURE_RESULTS_FILE.exists():
-        try:
-            return json.loads(POSTURE_RESULTS_FILE.read_text())
-        except Exception:
-            return []
-    return []
+async def get_posture_results(user_id: Optional[str] = None):
+    """Get posture assessment history, optionally filtered by user_id."""
+    if not POSTURE_RESULTS_FILE.exists():
+        return []
+    try:
+        history = json.loads(POSTURE_RESULTS_FILE.read_text())
+        if user_id:
+            history = [e for e in history if e.get("user_id") == user_id]
+        return history
+    except Exception:
+        return []
+
+
+def _load_json_file(path: Path, default: list) -> list:
+    if not path.exists():
+        return default
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return default
+
+
+def _save_json_file(path: Path, data: list):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2))
+
+
+class EyeResultData(BaseModel):
+    score: float
+    details: Optional[dict] = None
+    user_id: Optional[str] = None
+
+
+class ThermalResultData(BaseModel):
+    score: float
+    details: Optional[dict] = None
+    user_id: Optional[str] = None
+
+
+@app.post("/api/eyes/results")
+async def save_eye_result(result: EyeResultData):
+    """Save an eye strain assessment result."""
+    import datetime
+    history = _load_json_file(EYE_RESULTS_FILE, [])
+    entry = result.model_dump()
+    entry["timestamp"] = datetime.datetime.now().isoformat()
+    history.append(entry)
+    if len(history) > 100:
+        history = history[-100:]
+    _save_json_file(EYE_RESULTS_FILE, history)
+    return {"status": "ok", "total_results": len(history)}
+
+
+@app.get("/api/eyes/results")
+async def get_eye_results(user_id: Optional[str] = None):
+    history = _load_json_file(EYE_RESULTS_FILE, [])
+    if user_id:
+        history = [e for e in history if e.get("user_id") == user_id]
+    return history
+
+
+@app.post("/api/thermal/results")
+async def save_thermal_result(result: ThermalResultData):
+    """Save a thermal scan result."""
+    import datetime
+    history = _load_json_file(THERMAL_RESULTS_FILE, [])
+    entry = result.model_dump()
+    entry["timestamp"] = datetime.datetime.now().isoformat()
+    history.append(entry)
+    if len(history) > 100:
+        history = history[-100:]
+    _save_json_file(THERMAL_RESULTS_FILE, history)
+    return {"status": "ok", "total_results": len(history)}
+
+
+@app.get("/api/thermal/results")
+async def get_thermal_results(user_id: Optional[str] = None):
+    history = _load_json_file(THERMAL_RESULTS_FILE, [])
+    if user_id:
+        history = [e for e in history if e.get("user_id") == user_id]
+    return history
 
 
 @app.get("/api/summary")
 async def get_daily_summary(user_id: Optional[str] = None):
-    """Return a daily wellness summary aggregated from posture results."""
-    history = []
-    if POSTURE_RESULTS_FILE.exists():
-        try:
-            history = json.loads(POSTURE_RESULTS_FILE.read_text())
-        except Exception:
-            history = []
+    """Return a daily wellness summary aggregated from posture, eye, and thermal results."""
+    history = _load_json_file(POSTURE_RESULTS_FILE, [])
+    if user_id:
+        history = [e for e in history if e.get("user_id") == user_id]
+
+    eye_history = _load_json_file(EYE_RESULTS_FILE, [])
+    if user_id:
+        eye_history = [e for e in eye_history if e.get("user_id") == user_id]
+
+    thermal_history = _load_json_file(THERMAL_RESULTS_FILE, [])
+    if user_id:
+        thermal_history = [e for e in thermal_history if e.get("user_id") == user_id]
+
+    latest_eye = eye_history[-1] if eye_history else None
+    latest_thermal = thermal_history[-1] if thermal_history else None
 
     if not history:
         return {
@@ -223,6 +307,8 @@ async def get_daily_summary(user_id: Optional[str] = None):
             "average_score": None,
             "latest": None,
             "trend": "no_data",
+            "latest_eye": latest_eye,
+            "latest_thermal": latest_thermal,
         }
 
     scores = [entry["score"] for entry in history if "score" in entry]
@@ -242,6 +328,8 @@ async def get_daily_summary(user_id: Optional[str] = None):
         "average_score": avg_score,
         "latest": latest,
         "trend": trend,
+        "latest_eye": latest_eye,
+        "latest_thermal": latest_thermal,
     }
 
 
