@@ -13,8 +13,7 @@ import pvporcupine
 from pvrecorder import PvRecorder
 import whisper
 import httpx
-from elevenlabs.client import ElevenLabs
-from elevenlabs.play import play
+from voice_tts import get_tts_service
 import pygame
 
 # Load environment variables from .env file
@@ -23,15 +22,33 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+def ensure_singleton():
+    """Ensure only one instance of the voice client is running."""
+    import socket
+    try:
+        # Bind to a local port. If it fails, another instance is running.
+        lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        lock_socket.bind(('127.0.0.1', 9999))
+        # Keep the socket open to hold the lock
+        return lock_socket
+    except socket.error:
+        print("\n[ERROR] Another instance of pi_voice_client.py is already running.")
+        print("Please close the other process first to avoid overlapping audio and conflicts.\n")
+        import sys
+        sys.exit(1)
+
+# Global singleton lock
+_singleton_lock = ensure_singleton()
+
 # Config
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
-BACKEND_URL = "http://localhost:8000/voice/intent"
-BACKEND_FACE_URL = "http://localhost:8000/api/face/recognize"
+BACKEND_URL = os.environ.get("BACKEND_URL")
+BACKEND_FACE_URL = os.environ.get("BACKEND_FACE_URL")
 
-if not ELEVENLABS_API_KEY:
-    logger.warning("ELEVENLABS_API_KEY environment variable not set. TTS will fail.")
 
-elevenlabs_client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+
+# Initialize local TTS
+tts = get_tts_service()
+pygame.mixer.init()
 
 # Initialize whisper model (tiny is faster for Raspberry Pi)
 stt_model = whisper.load_model("tiny")
@@ -162,10 +179,8 @@ def record_audio(sample_rate=16000, silence_threshold=500, silence_duration=1.5,
 
 def transcribe_audio(audio_path: str) -> str:
     """Transcribe audio using Whisper."""
-    logger.info("Transcribing audio...")
     result = stt_model.transcribe(audio_path, language='en')
     text = result["text"].strip()
-    logger.info(f"User speaking: '{text}'")
     return text
 
 def query_voice_orchestrator(text: str, user_id: str, display_name: str, history: list) -> dict:
@@ -182,22 +197,21 @@ def query_voice_orchestrator(text: str, user_id: str, display_name: str, history
     return res.json()
 
 def play_tts(text: str):
-    """Generate and play TTS using ElevenLabs SDK v3."""
-    if not ELEVENLABS_API_KEY:
-        logger.error("No ElevenLabs API Key. Skipping TTS.")
-        return
-        
-    logger.info("Generating ElevenLabs TTS (SDK v3)...")
+    """Generate and play TTS using local Piper engine."""
+    logger.info(f"Generating local TTS for: {text[:30]}...")
+    temp_wav = "temp_response.wav"
     try:
-        audio = elevenlabs_client.text_to_speech.convert(
-            text=text,
-            voice_id="pNInz6obpgDQGcFmaJgB", # Adam
-            model_id="eleven_multilingual_v2",
-            output_format="mp3_44100_128",
-        )
-        play(audio)
+        pygame.mixer.stop() # Stop any current playback
+        if tts.synthesize(text, temp_wav):
+            sound = pygame.mixer.Sound(temp_wav)
+            sound.play()
+            # Wait for audio to finish playing
+            while pygame.mixer.get_busy():
+                pygame.time.Clock().tick(10)
+        else:
+            logger.error("Local TTS synthesis failed.")
     except Exception as e:
-        logger.error(f"TTS conversion failed: {e}")
+        logger.error(f"TTS playback failed: {e}")
 
 def main():
     logger.info("Starting Clarity+ Voice Client...")
@@ -293,7 +307,6 @@ def main():
                     logger.info(f"User speaking: '{text}'")
                     
                     # 4. Request orchestrator (with history)
-                    logger.info("Sending to voice orchestrator...")
                     try:
                         response = query_voice_orchestrator(text, user_id, display_name, VOICE_HISTORY)
                         assistant_msg = response.get("assistant_message", "I didn't quite catch that.")
@@ -318,6 +331,47 @@ def main():
                 # Clean up
                 if os.path.exists(audio_file):
                     os.remove(audio_file)
+                
+                # --- NEW: Follow-up Window (Continuous Listening) ---
+                follow_up_count = 0
+                while follow_up_count < 2 and text.strip(): # Only follow up if something was said
+                    time.sleep(0.5) # Let audio settle to avoid self-echo
+                    logger.info(f"Checking for follow-up (Attempt {follow_up_count + 1})...")
+                    # In a real app, you might check response.get("follow_up_needed")
+                    # For now, let's just listen for a short window (5-7 seconds)
+                    
+                    # Subtle ping or indicator here
+                    report_status("LISTENING", user_id, display_name)
+                    print("\n>>> CLARITY+ IS STILL LISTENING... <<<")
+                    
+                    # Record with a shorter silence timeout for follow-ups
+                    follow_up_audio = record_audio(silence_duration=1.2, max_duration=10)
+                    text = transcribe_audio(follow_up_audio)
+                    
+                    if os.path.exists(follow_up_audio):
+                        os.remove(follow_up_audio)
+                        
+                    if text.strip() and len(text.split()) > 1: # Basic check to avoid noise
+                        logger.info(f"Follow-up detected: '{text}'")
+                        report_status("PROCESSING", user_id, display_name)
+                        try:
+                            response = query_voice_orchestrator(text, user_id, display_name, VOICE_HISTORY)
+                            assistant_msg = response.get("assistant_message", "Okay.")
+                            logger.info(f"Clarity+: {assistant_msg}")
+                            
+                            VOICE_HISTORY.append({"role": "user", "content": text})
+                            VOICE_HISTORY.append({"role": "assistant", "content": assistant_msg})
+                            
+                            report_status("SPEAKING", user_id, display_name)
+                            play_tts(assistant_msg)
+                            follow_up_count += 1
+                        except Exception as e:
+                            logger.error(f"Follow-up processing failed: {e}")
+                            break
+                    else:
+                        logger.info("No follow-up speech detected. Ending window.")
+                        break
+                # --- End Follow-up ---
                     
                 logger.info("Resuming wake word listening...")
                 # Normal loop will reset state to IDLE
