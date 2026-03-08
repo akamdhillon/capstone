@@ -82,7 +82,7 @@ export function PostureView() {
     const [liveTorso, setLiveTorso] = useState(0);
     const [result, setResult] = useState<PostureResult | null>(null);
     const [returnCountdown, setReturnCountdown] = useState(RESULTS_DISPLAY_DURATION);
-    const [loadingMsg, setLoadingMsg] = useState('Loading posture model…');
+    const [loadingMsg, setLoadingMsg] = useState('Loading posture model...');
 
     const neckBuf = useRef<number[]>([]);
     const torsoBuf = useRef<number[]>([]);
@@ -136,11 +136,11 @@ export function PostureView() {
 
         const recs: string[] = [];
         if (neckSt !== 'good') {
-            recs.push('Forward head detected — practice chin tucks');
+            recs.push('Forward head detected - practice chin tucks');
             recs.push('Check screen height (should be at eye level)');
         }
         if (torsoSt !== 'good') {
-            recs.push('Slouching detected — sit or stand more upright');
+            recs.push('Slouching detected - sit or stand more upright');
             recs.push('Engage core muscles and retract shoulder blades');
         }
 
@@ -149,10 +149,10 @@ export function PostureView() {
             status = 'good'; message = 'Excellent posture! Keep it up 💪';
             score = Math.min(100, 90 + Math.round((NECK_GOOD - neckMed) * 2));
         } else if (neckSt === 'poor' || torsoSt === 'poor') {
-            status = 'poor'; message = 'Poor posture — needs correction';
+            status = 'poor'; message = 'Poor posture - needs correction';
             score = Math.max(20, 50 - Math.round(Math.max(neckMed - NECK_MODERATE, torsoMed - TORSO_MODERATE) * 2));
         } else {
-            status = 'moderate'; message = 'Moderate posture — small corrections needed';
+            status = 'moderate'; message = 'Moderate posture - small corrections needed';
             score = Math.min(89, 60 + Math.round((NECK_MODERATE - neckMed) + (TORSO_MODERATE - torsoMed)));
         }
         score = Math.max(0, Math.min(100, score));
@@ -227,7 +227,7 @@ export function PostureView() {
         let cancelled = false;
 
         async function init() {
-            setLoadingMsg('Loading posture model…');
+            setLoadingMsg('Loading posture model...');
             const vision = await FilesetResolver.forVisionTasks(
                 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
             );
@@ -241,7 +241,7 @@ export function PostureView() {
             });
             if (!cancelled) landmarkerRef.current = landmarker;
 
-            setLoadingMsg('Starting camera…');
+            setLoadingMsg('Starting camera...');
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { width: 640, height: 480, facingMode: 'user' },
             });
@@ -252,7 +252,7 @@ export function PostureView() {
                 videoRef.current.srcObject = stream;
                 videoRef.current.onloadeddata = () => {
                     if (cancelled) return;
-                    // Enter 'ready' phase — prep timer will start
+                    // Enter 'ready' phase - prep timer will start
                     setPhase('ready');
                     phaseRef.current = 'ready';
                     animFrameRef.current = requestAnimationFrame(runDetection);
@@ -355,7 +355,7 @@ export function PostureView() {
                     <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl"
                         style={{ background: 'rgba(0,0,0,0.5)' }}>
                         <div className="w-5 h-5 rounded-full bg-cyan-400 animate-ping mb-6" />
-                        <p className="text-white text-xl font-medium">Get into position…</p>
+                        <p className="text-white text-xl font-medium">Get into position...</p>
                         <p className="text-white/50 text-sm mt-2">Stand so your upper body is visible</p>
                         <div className="mt-8 text-cyan-400 font-mono text-5xl font-bold">{timeLeft}s</div>
                     </div>
@@ -380,7 +380,7 @@ export function PostureView() {
                     <div className="absolute bottom-0 left-0 right-0 p-4">
                         <div className="glass px-4 py-3">
                             <div className="flex justify-between items-center mb-2">
-                                <span className="text-white/80 text-sm">Analyzing posture…</span>
+                                <span className="text-white/80 text-sm">Analyzing posture...</span>
                                 <span className="text-cyan-400 font-mono text-sm">{timeLeft}s</span>
                             </div>
                             <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">

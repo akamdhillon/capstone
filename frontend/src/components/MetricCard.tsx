@@ -42,7 +42,7 @@ export function MetricCard({ label, score, icon, detail, className = '', disable
                 </div>
                 <div className="text-right">
                     <div className={`text-3xl font-bold ${getScoreColor(score)}`}>
-                        {score !== null ? Math.round(score) : '—'}
+                        {score !== null ? Math.round(score) : '-'}
                     </div>
                     <div className={`text-xs ${getScoreColor(score)} opacity-80`}>
                         {getScoreLabel(score)}

@@ -40,7 +40,7 @@ export function IdleView() {
     const handleRecognize = async () => {
         setIsRecognizing(true);
         setShowCamera(true);
-        setRecognizeStatus('Starting camera…');
+        setRecognizeStatus('Starting camera...');
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -59,7 +59,7 @@ export function IdleView() {
             });
             await new Promise((r) => setTimeout(r, 800));
 
-            setRecognizeStatus('Looking for your face…');
+            setRecognizeStatus('Looking for your face...');
 
             // Try up to 3 frames to find a face before sending for recognition
             let b64: string | null = null;
@@ -80,7 +80,7 @@ export function IdleView() {
                     b64 = frame;
                     break;
                 }
-                setRecognizeStatus(`Adjusting… (attempt ${attempt + 2}/3)`);
+                setRecognizeStatus(`Adjusting... (attempt ${attempt + 2}/3)`);
                 await new Promise((r) => setTimeout(r, 700));
             }
 
@@ -91,7 +91,7 @@ export function IdleView() {
                 return;
             }
 
-            setRecognizeStatus('Identifying…');
+            setRecognizeStatus('Identifying...');
             const result = await recognizeFace(b64);
             stopCamera();
 
@@ -162,7 +162,7 @@ export function IdleView() {
                         <div className="absolute inset-0 rounded-2xl border-4 border-cyan-400/40 animate-pulse pointer-events-none" />
                     </div>
                     <p className="text-white/70 text-sm mb-2">
-                        {recognizeStatus || 'Recognizing…'}
+                        {recognizeStatus || 'Recognizing...'}
                     </p>
                     <div className="w-5 h-5 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin mb-4" />
                     <button
@@ -189,7 +189,7 @@ export function IdleView() {
                 {isRecognizing ? (
                     <span className="flex items-center gap-3">
                         <span className="w-5 h-5 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
-                        Recognizing…
+                        Recognizing...
                     </span>
                 ) : (
                     <span className="flex items-center gap-3">

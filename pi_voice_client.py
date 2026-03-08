@@ -164,7 +164,7 @@ def record_audio(sample_rate=16000, silence_threshold=500, silence_duration=1.5,
             
             # Only stop on silence AFTER we've detected speech
             if has_speech and silent_frames >= frames_for_silence:
-                logger.info(f"Silence detected after {total_frames * 512 / sample_rate:.1f}s — stopping.")
+                logger.info(f"Silence detected after {total_frames * 512 / sample_rate:.1f}s - stopping.")
                 break
     finally:
         recorder.stop()
@@ -272,7 +272,7 @@ def main():
                 user_id, display_name = capture_and_recognize()
                 
                 if user_id == "guest":
-                    # Not recognized or low confidence — greet and ask to enroll
+                    # Not recognized or low confidence - greet and ask to enroll
                     logger.info("User treated as guest.")
                     play_tts("I don't recognize you. Please enroll first using the mirror display.")
                     report_status("IDLE", "guest", "Guest")

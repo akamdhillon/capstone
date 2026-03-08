@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter
@@ -7,10 +8,14 @@ import ollama
 from pydantic import BaseModel
 import httpx
 
+from config import settings
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-JETSON_BASE_URL = "http://192.168.10.2:8001"
+_THIS_DIR = Path(__file__).resolve().parent
+
+JETSON_BASE_URL = f"http://{settings.JETSON_IP}:8001"
 
 class VoiceMessage(BaseModel):
     role: str
@@ -53,7 +58,7 @@ async def _execute_jetson_action(action_name: str, params: dict, user_id: str) -
         # GET http://localhost:8000/summary requested by user architecture
         try:
             async with httpx.AsyncClient() as client:
-                res = await client.get(f"http://localhost:8000/summary", params={"user_id": user_id})
+                res = await client.get("http://localhost:8000/api/summary", params={"user_id": user_id})
                 return res.json() if res.status_code == 200 else {"error": "Failed to fetch summary"}
         except Exception as e:
              return {"error": str(e)}
@@ -129,7 +134,7 @@ async def process_voice_intent(request: VoiceIntentRequest):
         # Enrollment  
         (["enroll my face", "enroll me", "add new user", "add a new user", "register my face", "register me"],
          "ENROLL_USER", "Starting your profile enrollment..."),
-        # Identity (user asking who THEY are) — must come BEFORE self-identity rules
+        # Identity (user asking who THEY are) - must come BEFORE self-identity rules
         (["who am i", "identify me", "recognize me", "who is this",
           "what's my name", "what is my name", "say my name", "do you know me", "do you know who i am"],
          "RECOGNIZE_USER", "Looking for you now..."),
@@ -151,16 +156,16 @@ async def process_voice_intent(request: VoiceIntentRequest):
         (["wellness summary", "wellness report", "daily summary", "give me my summary", 
           "how am i doing today", "how am i doing"],
          "DAILY_SUMMARY", "Here's your wellness summary."),
-        # Unsupported requests — instant decline
+        # Unsupported requests - instant decline
         (["play music", "play a song", "play some music", "turn on music", 
           "place music", "place some music", "place a music", "some music", "put on music"],
-         "SMALL_TALK", "Sorry, I can't play music. I'm your wellness mirror — I can check your posture, skin, or give you a wellness summary instead!"),
+         "SMALL_TALK", "Sorry, I can't play music. I'm your wellness mirror - I can check your posture, skin, or give you a wellness summary instead!"),
         (["weather", "temperature outside", "forecast", "is it raining", "what's the weather"],
          "SMALL_TALK", "I can't check the weather, but I can check your wellness! Want a posture check or skin analysis?"),
         (["order", "pizza", "food", "delivery", "uber", "doordash"],
          "SMALL_TALK", "I can't order food, but I can help you feel your best! Want me to check your posture or skin?"),
         (["alarm", "timer", "reminder", "remind me", "set a timer", "set an alarm", "wake me up"],
-         "SMALL_TALK", "I don't have timer or alarm features. I'm focused on wellness — want a posture check or daily summary?"),
+         "SMALL_TALK", "I don't have timer or alarm features. I'm focused on wellness - want a posture check or daily summary?"),
         (["call", "phone", "text", "message", "send a message", "make a call"],
          "SMALL_TALK", "I can't make calls or send messages. I'm your wellness mirror! Want me to check your posture or skin instead?"),
         (["light", "lights", "turn on", "turn off", "brightness", "dim"],
@@ -171,7 +176,7 @@ async def process_voice_intent(request: VoiceIntentRequest):
         if any(phrase in user_lower for phrase in phrases):
             logger.info(f"Deterministic match: '{user_lower}' → {det_intent}")
             
-            # Special handling for RECOGNIZE_USER — use display name if available
+            # Special handling for RECOGNIZE_USER - use display name if available
             if det_intent == "RECOGNIZE_USER":
                 if request.display_name:
                     det_message = f"You're {request.display_name}! How can I help you today?"
@@ -276,6 +281,7 @@ async def process_voice_intent(request: VoiceIntentRequest):
                 with open(db_path, "r") as f:
                     history_data = json.load(f)
                     if history_data:
+                    # Get the most recent entry
                         latest = history_data[-1]
                         score = latest.get("score")
                         status = latest.get("status")
@@ -290,7 +296,7 @@ async def process_voice_intent(request: VoiceIntentRequest):
 
     try:
         response = ollama.chat(
-            model='llama3.2:3b',
+            model=settings.OLLAMA_MODEL,
             messages=messages,
             options={
                 'temperature': 0.05,    # Lower = faster, more deterministic
@@ -393,7 +399,45 @@ async def process_voice_intent(request: VoiceIntentRequest):
             actions_run.append(VoiceAction(name=name, params=params, result=action_result))
 
         # ── Navigation & Action Broadcasts ──────────────────────────────
-        await _handle_broadcasts(intent, actions_run)
+        
+        async def _broadcast_nav(view_name: str):
+            try:
+                async with httpx.AsyncClient() as client:
+                    await client.post("http://localhost:8000/api/navigate", json={"view": view_name})
+            except Exception:
+                pass
+
+        async def _broadcast_action(action_name: str):
+            try:
+                async with httpx.AsyncClient() as client:
+                    await client.post("http://localhost:8000/api/action", json={"action": action_name})
+            except Exception:
+                pass
+
+        # Posture triggers
+        posture_actions = [a for a in actions_run if a.name == "run_posture_check"]
+        if posture_actions or intent == "POSTURE_CHECK":
+            await _broadcast_nav("posture")
+
+        # Home triggers
+        if intent in ("NAVIGATE_HOME", "GO_HOME", "GO_BACK"):
+            await _broadcast_nav("idle")
+            
+        # Analysis triggers
+        if intent == "FULL_ANALYSIS":
+            await _broadcast_nav("analysis")
+            
+        # Enrollment triggers
+        if intent == "ENROLL_USER":
+            await _broadcast_nav("enrollment")
+            
+        # Recognition triggers
+        if intent == "RECOGNIZE_USER":
+            await _broadcast_action("recognize")
+
+        # Summary triggers
+        if intent == "DAILY_SUMMARY":
+            await _broadcast_nav("summary")
 
         return VoiceIntentResponse(
             assistant_message=assistant_msg,

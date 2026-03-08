@@ -238,12 +238,12 @@ export function EnrollmentView() {
                             {/* Face detection overlay border */}
                             <div
                                 className={`absolute inset-0 rounded-2xl border-4 transition-colors duration-300 pointer-events-none ${captureStatus === 'ok'
-                                        ? 'border-green-400'
-                                        : captureStatus === 'no_face'
-                                            ? 'border-red-400'
-                                            : captureStatus === 'detecting'
-                                                ? 'border-yellow-400 animate-pulse'
-                                                : 'border-white/20'
+                                    ? 'border-green-400'
+                                    : captureStatus === 'no_face'
+                                        ? 'border-red-400'
+                                        : captureStatus === 'detecting'
+                                            ? 'border-yellow-400 animate-pulse'
+                                            : 'border-white/20'
                                     }`}
                             />
                             {/* Status icon overlay */}
@@ -280,10 +280,10 @@ export function EnrollmentView() {
                                 <div
                                     key={i}
                                     className={`w-3 h-3 rounded-full transition-colors ${i < capturedImages.length
-                                            ? 'bg-green-400'
-                                            : i === captureIndex
-                                                ? 'bg-cyan-400 animate-pulse'
-                                                : 'bg-white/20'
+                                        ? 'bg-green-400'
+                                        : i === captureIndex
+                                            ? 'bg-cyan-400 animate-pulse'
+                                            : 'bg-white/20'
                                         }`}
                                 />
                             ))}
@@ -291,7 +291,7 @@ export function EnrollmentView() {
 
                         <div className="flex flex-col gap-3">
                             <Button onClick={handleCapture} disabled={isCapturing}>
-                                {isCapturing ? 'Detecting…' : `Capture ${currentGuide.label}`}
+                                {isCapturing ? 'Detecting...' : `Capture ${currentGuide.label}`}
                             </Button>
                             <Button variant="secondary" onClick={handleCancel}>
                                 Cancel
@@ -305,7 +305,7 @@ export function EnrollmentView() {
                     <div className="text-center py-8">
                         <div className="w-16 h-16 mx-auto mb-6 border-4 border-white/20 border-t-cyan-400 rounded-full animate-spin" />
                         <h2 className="text-2xl font-light text-white mb-2">
-                            Creating your profile…
+                            Creating your profile...
                         </h2>
                         <p className="text-white/50 text-sm">
                             Processing {capturedImages.length} face captures
@@ -349,10 +349,10 @@ export function EnrollmentView() {
                             <div
                                 key={s}
                                 className={`w-2 h-2 rounded-full transition-colors ${step === s
-                                        ? 'bg-cyan-400'
-                                        : ['welcome', 'name', 'capture', 'processing', 'success'].indexOf(step) > i
-                                            ? 'bg-white/60'
-                                            : 'bg-white/20'
+                                    ? 'bg-cyan-400'
+                                    : ['welcome', 'name', 'capture', 'processing', 'success'].indexOf(step) > i
+                                        ? 'bg-white/60'
+                                        : 'bg-white/20'
                                     }`}
                             />
                         )
