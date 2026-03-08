@@ -33,6 +33,9 @@ class Settings:
     IMAGE_RETENTION_DAYS = os.getenv("IMAGE_RETENTION_DAYS", "30")
     JANITOR_SCHEDULE_HOUR = os.getenv("JANITOR_SCHEDULE_HOUR", "2")
     
+    # LLM
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
+
     # Jetson Service Ports
     JETSON_FACE_PORT = 8002
     JETSON_SKIN_PORT = 8003

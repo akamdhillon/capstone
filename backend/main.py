@@ -6,6 +6,7 @@ Main FastAPI application for the Clarity+ Smart Mirror API Gateway.
 Runs on Raspberry Pi 4, orchestrating ML inference requests to Jetson.
 """
 
+import asyncio
 import logging
 import json
 from contextlib import asynccontextmanager
@@ -19,6 +20,7 @@ from pydantic import BaseModel
 from config import settings
 from routes import analysis, face
 import voice_orchestrator
+from voice_listener import VoiceListener
 
 # --- WebSocket Manager ---
 class ConnectionManager:
@@ -40,12 +42,14 @@ class ConnectionManager:
                 pass
 
 manager = ConnectionManager()
+_voice_listener: VoiceListener | None = None
 
 # --- Models ---
 class VoiceStatus(BaseModel):
     state: str  # IDLE, LISTENING, PROCESSING, SPEAKING
     user_id: Optional[str] = None
     display_name: Optional[str] = None
+    caption: Optional[str] = None
 
 # Configure logging
 logging.basicConfig(
@@ -59,16 +63,26 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
-    Stateless backend - no DB or Scheduler init.
+    Starts the voice listener background thread on startup.
     """
+    global _voice_listener
     logger.info("Starting Clarity+ Backend...")
     
     logger.info(f"Thermal hardware: {'ENABLED' if settings.THERMAL_ENABLED else 'DISABLED'}")
     logger.info(f"Scoring weights: {settings.weights}")
+
+    # Start voice listener (mic → Vosk → orchestrator → TTS)
+    loop = asyncio.get_running_loop()
+    _voice_listener = VoiceListener(ws_manager=manager, event_loop=loop)
+    _voice_listener.start()
     
     yield
     
+    # Shutdown
+    if _voice_listener:
+        _voice_listener.stop()
     logger.info("Shutting down Clarity+ Backend...")
+
 
 
 # Create FastAPI application

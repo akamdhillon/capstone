@@ -203,3 +203,86 @@ export async function recognizeFace(imageBase64: string): Promise<FaceRecognizeR
     if (!response.ok) throw new Error('Face recognition failed');
     return response.json();
 }
+
+
+// =============================================================================
+// WELLNESS DATA API
+// =============================================================================
+
+export interface DailySummary {
+    total_assessments: number;
+    average_score: number | null;
+    latest: {
+        score: number;
+        status: string;
+        timestamp: string;
+        [key: string]: unknown;
+    } | null;
+    trend: 'improving' | 'declining' | 'stable' | 'no_data';
+}
+
+export interface PostureResultEntry {
+    score: number;
+    status: string;
+    neck_angle: number;
+    torso_angle: number;
+    neck_status: string;
+    torso_status: string;
+    recommendations: string[];
+    frames_analyzed: number;
+    timestamp: string;
+}
+
+export async function getDailySummary(userId?: string): Promise<DailySummary> {
+    const params = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+    const response = await fetch(`${API_BASE_URL}/api/summary${params}`);
+    if (!response.ok) throw new Error('Failed to fetch summary');
+    return response.json();
+}
+
+export async function getPostureResults(): Promise<PostureResultEntry[]> {
+    const response = await fetch(`${API_BASE_URL}/api/posture/results`);
+    if (!response.ok) throw new Error('Failed to fetch posture results');
+    return response.json();
+}
+
+
+// =============================================================================
+// INDIVIDUAL SERVICE ANALYSIS API
+// =============================================================================
+
+export interface SingleServiceResult {
+    success: boolean;
+    score: number | null;
+    details: Record<string, unknown> | null;
+    captured_image: string | null;
+    errors: string[];
+    timing_ms: number;
+}
+
+export async function triggerEyeAnalysis(image?: string): Promise<SingleServiceResult> {
+    const response = await fetch(`${API_BASE_URL}/api/debug/eyes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: image ?? null }),
+    });
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Eye analysis failed: ${errorText}`);
+    }
+    return response.json();
+}
+
+export async function triggerSkinAnalysis(image?: string): Promise<SingleServiceResult> {
+    const response = await fetch(`${API_BASE_URL}/api/debug/skin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: image ?? null }),
+    });
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Skin analysis failed: ${errorText}`);
+    }
+    return response.json();
+}
+

@@ -9,13 +9,21 @@ Runs on Jetson (TensorRT) or Mac (CPU) transparently.
 import base64
 import time
 import logging
+from contextlib import asynccontextmanager
 from typing import List, Optional
 
 import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from insightface.app import FaceAnalysis
+
+# ---------------------------------------------------------------------------
+# Suppress noisy ONNX / InsightFace logs BEFORE importing insightface
+# ---------------------------------------------------------------------------
+logging.getLogger("onnxruntime").setLevel(logging.WARNING)
+logging.getLogger("insightface").setLevel(logging.WARNING)
+
+from insightface.app import FaceAnalysis  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -24,14 +32,37 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("service.face")
 
 # ---------------------------------------------------------------------------
-# FastAPI app
-# ---------------------------------------------------------------------------
-app = FastAPI(title="Clarity+ Face Service")
-
-# ---------------------------------------------------------------------------
 # Global model reference (loaded once at startup)
 # ---------------------------------------------------------------------------
 face_app: Optional[FaceAnalysis] = None
+
+
+def _load_models():
+    """Load InsightFace models once at boot."""
+    global face_app
+    logger.info("Loading InsightFace models (buffalo_l) …")
+    t0 = time.time()
+
+    face_app = FaceAnalysis(
+        name="buffalo_l",
+        providers=["CPUExecutionProvider"],  # safe default; TRT added on Jetson
+    )
+    face_app.prepare(ctx_id=-1, det_size=(640, 640))
+
+    elapsed = time.time() - t0
+    logger.info(f"Models loaded in {elapsed:.1f}s")
+
+
+@asynccontextmanager
+async def lifespan(app):
+    _load_models()
+    yield
+
+
+# ---------------------------------------------------------------------------
+# FastAPI app
+# ---------------------------------------------------------------------------
+app = FastAPI(title="Clarity+ Face Service", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------
@@ -58,28 +89,6 @@ class RecognizeRequest(BaseModel):
 class AnalysisRequest(BaseModel):
     """Legacy request for orchestrator compatibility."""
     image_path: str
-
-
-# ---------------------------------------------------------------------------
-# Startup / Shutdown
-# ---------------------------------------------------------------------------
-@app.on_event("startup")
-def load_models():
-    """Load InsightFace models once at boot."""
-    global face_app
-    logger.info("Loading InsightFace models (buffalo_l) …")
-    t0 = time.time()
-
-    face_app = FaceAnalysis(
-        name="buffalo_l",
-        providers=["CPUExecutionProvider"],  # safe default; TRT added on Jetson
-    )
-    # det_size controls the resolution fed to RetinaFace.
-    # 640×640 is a good balance of speed and accuracy.
-    face_app.prepare(ctx_id=-1, det_size=(640, 640))
-
-    elapsed = time.time() - t0
-    logger.info(f"Models loaded in {elapsed:.1f}s")
 
 
 # ---------------------------------------------------------------------------

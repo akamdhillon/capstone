@@ -2,22 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-/* =============================================================================
-   CLARITY+ SMART MIRROR - CUSTOM STYLES
-   ============================================================================= */
-
-/* Root variables for the design system */
 :root {
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-blur: 12px;
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: 16px;
+  --glass-bg-hover: rgba(255, 255, 255, 0.07);
   --accent: #22d3ee;
+  --accent-dim: rgba(34, 211, 238, 0.15);
   --success: #4ade80;
   --warning: #facc15;
   --danger: #f87171;
 }
 
-/* Base styles for kiosk mode */
 html,
 body,
 #root {
@@ -29,9 +25,12 @@ body,
   background-color: #000000;
   color: white;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Glassmorphism utility class */
+/* ── Glassmorphism ────────────────────────────────────────────────────── */
+
 .glass {
   background: var(--glass-bg);
   backdrop-filter: blur(var(--glass-blur));
@@ -42,24 +41,26 @@ body,
 
 .glass-subtle {
   background: rgba(255, 255, 255, 0.02);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: 0.75rem;
 }
 
-/* Circular progress animation */
-@keyframes progress-fill {
-  from {
-    stroke-dashoffset: 339.292;
-  }
+.glass-panel {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 1.5rem;
 }
 
-/* Fade in animation */
+/* ── Animations ───────────────────────────────────────────────────────── */
+
 @keyframes fade-in {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
 
   to {
@@ -68,28 +69,210 @@ body,
   }
 }
 
-.animate-fade-in {
-  animation: fade-in 0.5s ease-out forwards;
+@keyframes fade-in-slow {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
-/* Pulse animation for idle mode */
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes breathe {
+
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
 @keyframes pulse-subtle {
 
   0%,
   100% {
-    opacity: 0.5;
+    opacity: 0.4;
   }
 
   50% {
-    opacity: 0.8;
+    opacity: 0.7;
   }
+}
+
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(34, 211, 238, 0.2);
+  }
+
+  50% {
+    box-shadow: 0 0 20px rgba(34, 211, 238, 0.5);
+  }
+}
+
+@keyframes voice-bar {
+
+  0%,
+  100% {
+    height: 6px;
+  }
+
+  50% {
+    height: 24px;
+  }
+}
+
+@keyframes progress-fill {
+  from {
+    stroke-dashoffset: 339.292;
+  }
+}
+
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+@keyframes status-breathe {
+
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes vignette-pulse {
+
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+.animate-fade-in-slow {
+  animation: fade-in-slow 1.2s ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-down {
+  animation: slide-down 0.5s ease-out forwards;
+}
+
+.animate-breathe {
+  animation: breathe 4s ease-in-out infinite;
 }
 
 .animate-pulse-subtle {
   animation: pulse-subtle 3s ease-in-out infinite;
 }
 
-/* Score color utilities */
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-voice-bar {
+  animation: voice-bar 0.6s ease-in-out infinite;
+}
+
+.animate-status-breathe {
+  animation: status-breathe 3s ease-in-out infinite;
+}
+
+.animate-vignette-pulse {
+  animation: vignette-pulse 2.5s ease-in-out infinite;
+}
+
+/* Staggered fade-in for child elements */
+.stagger-children>* {
+  opacity: 0;
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+.stagger-children>*:nth-child(1) {
+  animation-delay: 0.05s;
+}
+
+.stagger-children>*:nth-child(2) {
+  animation-delay: 0.10s;
+}
+
+.stagger-children>*:nth-child(3) {
+  animation-delay: 0.15s;
+}
+
+.stagger-children>*:nth-child(4) {
+  animation-delay: 0.20s;
+}
+
+.stagger-children>*:nth-child(5) {
+  animation-delay: 0.25s;
+}
+
+.stagger-children>*:nth-child(6) {
+  animation-delay: 0.30s;
+}
+
+/* ── Score Colors ─────────────────────────────────────────────────────── */
+
 .score-excellent {
   color: var(--success);
 }
@@ -110,7 +293,8 @@ body,
   color: var(--danger);
 }
 
-/* Glow effects */
+/* ── Glow Effects ─────────────────────────────────────────────────────── */
+
 .glow-success {
   filter: drop-shadow(0 0 20px rgba(74, 222, 128, 0.3));
 }
@@ -123,34 +307,15 @@ body,
   filter: drop-shadow(0 0 20px rgba(248, 113, 113, 0.3));
 }
 
-/* Button styles */
-.btn-primary {
-  background: linear-gradient(135deg, #22d3ee, #0ea5e9);
-  color: black;
-  font-weight: 600;
-  padding: 0.75rem 2rem;
-  border-radius: 0.5rem;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
+.glow-accent {
+  filter: drop-shadow(0 0 20px rgba(34, 211, 238, 0.3));
 }
 
-.btn-primary:hover {
-  transform: scale(1.02);
-  box-shadow: 0 0 30px rgba(34, 211, 238, 0.4);
-}
 
-.btn-secondary {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  font-weight: 500;
-  padding: 0.75rem 2rem;
-  border-radius: 0.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
 
-.btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.15);
+/* ── Thin separator line ──────────────────────────────────────────────── */
+
+.divider-thin {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
 }

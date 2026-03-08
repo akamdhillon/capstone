@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { IdleView } from './IdleView';
 import { AppProvider } from '../context/AppContext';
 
@@ -10,7 +10,7 @@ vi.mock('../services/api', () => ({
 
 vi.mock('../hooks/useVoiceWebSocket', () => ({
     useVoiceWebSocket: vi.fn(),
-    useVoiceState: vi.fn(() => ({ voiceState: 'IDLE', displayName: '' })),
+    useVoiceState: vi.fn(() => ({ voiceState: 'IDLE', displayName: '', caption: null })),
 }));
 
 function renderWithProvider() {
@@ -22,28 +22,21 @@ function renderWithProvider() {
 }
 
 describe('IdleView', () => {
-    it('renders "Recognize Me" button', () => {
-        renderWithProvider();
-        expect(screen.getByText('Recognize Me')).toBeInTheDocument();
+    it('renders the clock', () => {
+        const { container } = renderWithProvider();
+        // Clock displays a time string with AM/PM
+        expect(container.textContent).toMatch(/AM|PM/i);
     });
 
-    it('renders "Check Posture" button', () => {
-        renderWithProvider();
-        expect(screen.getByText(/Check Posture/)).toBeInTheDocument();
+    it('renders the status dot', () => {
+        const { container } = renderWithProvider();
+        const dot = container.querySelector('.rounded-full');
+        expect(dot).toBeInTheDocument();
     });
 
-    it('renders enrollment link', () => {
-        renderWithProvider();
-        expect(screen.getByText(/New user\? Tap to enroll/)).toBeInTheDocument();
-    });
-
-    it('renders voice test button', () => {
-        renderWithProvider();
-        expect(screen.getByText(/Try Voice Mode/)).toBeInTheDocument();
-    });
-
-    it('renders identity prompt', () => {
-        renderWithProvider();
-        expect(screen.getByText(/Tap above to identify yourself/)).toBeInTheDocument();
+    it('does not render any buttons', () => {
+        const { container } = renderWithProvider();
+        const buttons = container.querySelectorAll('button');
+        expect(buttons.length).toBe(0);
     });
 });

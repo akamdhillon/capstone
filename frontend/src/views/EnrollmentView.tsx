@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { GlassCard } from '../components/ui/GlassCard';
-import { Button } from '../components/ui/Button';
 import { detectFace, enrollFace } from '../services/api';
 
 type EnrollmentStep = 'welcome' | 'name' | 'capture' | 'processing' | 'success';
@@ -17,6 +16,8 @@ const CAPTURE_GUIDES: CaptureGuide[] = [
     { label: 'Tilt down', emoji: '🙂', instruction: 'Lower your chin slightly' },
     { label: 'Tilt up', emoji: '🙂', instruction: 'Raise your chin slightly' },
 ];
+
+const STEP_AUTO_ADVANCE_MS = 5000;
 
 export function EnrollmentView() {
     const { setView, setCurrentUser } = useApp();
@@ -69,6 +70,22 @@ export function EnrollmentView() {
         };
     }, [step, startCamera, stopCamera]);
 
+    // Auto-advance from welcome → name after a delay
+    useEffect(() => {
+        if (step === 'welcome') {
+            const timer = setTimeout(() => setStep('name'), STEP_AUTO_ADVANCE_MS);
+            return () => clearTimeout(timer);
+        }
+    }, [step]);
+
+    // Auto-advance from success → dashboard after a delay
+    useEffect(() => {
+        if (step === 'success') {
+            const timer = setTimeout(() => setView('dashboard'), STEP_AUTO_ADVANCE_MS);
+            return () => clearTimeout(timer);
+        }
+    }, [step, setView]);
+
     // ── Capture a single frame ─────────────────────────────────────────
     const captureFrame = useCallback((): string | null => {
         const video = videoRef.current;
@@ -81,7 +98,6 @@ export function EnrollmentView() {
         if (!ctx) return null;
 
         ctx.drawImage(video, 0, 0);
-        // Get base64 without the data:image/jpeg;base64, prefix
         const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
         return dataUrl.split(',')[1];
     }, []);
@@ -127,6 +143,15 @@ export function EnrollmentView() {
         setIsCapturing(false);
     };
 
+    // Auto-capture on the capture step
+    useEffect(() => {
+        if (step === 'capture' && !isCapturing && captureStatus === 'idle') {
+            const timer = setTimeout(() => handleCapture(), 2000);
+            return () => clearTimeout(timer);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [step, isCapturing, captureStatus, captureIndex]);
+
     // ── Process enrollment ──────────────────────────────────────────────
     const processEnrollment = async (images: string[]) => {
         setEnrollError(null);
@@ -148,33 +173,25 @@ export function EnrollmentView() {
         }
     };
 
-    const handleCancel = () => {
-        stopCamera();
-        setView('idle');
-    };
-
     const currentGuide = CAPTURE_GUIDES[captureIndex];
 
     return (
-        <div className="min-h-screen bg-black flex items-center justify-center p-8">
+        <div className="min-h-screen bg-black flex items-center justify-center p-8 select-none">
             <GlassCard className="w-full max-w-lg animate-fade-in">
                 {/* ── Welcome Step ─────────────────────────────────── */}
                 {step === 'welcome' && (
                     <div className="text-center">
-                        <h1 className="text-3xl font-light text-white mb-2">
+                        <h1 className="text-2xl font-light text-white/90 mb-2 tracking-wide">
                             Welcome to Clarity+
                         </h1>
-                        <p className="text-white/60 mb-8">
+                        <p className="text-white/40 text-sm mb-8 leading-relaxed">
                             Let's create your profile for personalized wellness tracking.
                             We'll capture your face from a few angles so the mirror
                             can recognize you automatically.
                         </p>
-                        <div className="flex flex-col gap-3">
-                            <Button onClick={() => setStep('name')}>Get Started</Button>
-                            <Button variant="secondary" onClick={handleCancel}>
-                                Cancel
-                            </Button>
-                        </div>
+                        <p className="text-white/20 text-xs tracking-wide animate-breathe">
+                            Starting shortly...
+                        </p>
                     </div>
                 )}
 
@@ -198,20 +215,9 @@ export function EnrollmentView() {
                             className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/40 focus:outline-none focus:border-cyan-400 text-center text-lg mb-6"
                             autoFocus
                         />
-                        <div className="flex flex-col gap-3">
-                            <Button
-                                onClick={() => setStep('capture')}
-                                disabled={!name.trim()}
-                            >
-                                Next
-                            </Button>
-                            <Button
-                                variant="secondary"
-                                onClick={() => setStep('welcome')}
-                            >
-                                Back
-                            </Button>
-                        </div>
+                        <p className="text-white/20 text-xs tracking-wide">
+                            Press Enter to continue
+                        </p>
                     </div>
                 )}
 
@@ -238,12 +244,12 @@ export function EnrollmentView() {
                             {/* Face detection overlay border */}
                             <div
                                 className={`absolute inset-0 rounded-2xl border-4 transition-colors duration-300 pointer-events-none ${captureStatus === 'ok'
-                                        ? 'border-green-400'
-                                        : captureStatus === 'no_face'
-                                            ? 'border-red-400'
-                                            : captureStatus === 'detecting'
-                                                ? 'border-yellow-400 animate-pulse'
-                                                : 'border-white/20'
+                                    ? 'border-green-400'
+                                    : captureStatus === 'no_face'
+                                        ? 'border-red-400'
+                                        : captureStatus === 'detecting'
+                                            ? 'border-yellow-400 animate-pulse'
+                                            : 'border-white/20'
                                     }`}
                             />
                             {/* Status icon overlay */}
@@ -267,7 +273,7 @@ export function EnrollmentView() {
                         {/* Error message */}
                         {captureStatus === 'no_face' && (
                             <p className="text-red-400 text-sm mb-3">
-                                No face detected. Adjust your position and try again.
+                                No face detected. Adjust your position.
                             </p>
                         )}
                         {enrollError && (
@@ -280,23 +286,18 @@ export function EnrollmentView() {
                                 <div
                                     key={i}
                                     className={`w-3 h-3 rounded-full transition-colors ${i < capturedImages.length
-                                            ? 'bg-green-400'
-                                            : i === captureIndex
-                                                ? 'bg-cyan-400 animate-pulse'
-                                                : 'bg-white/20'
+                                        ? 'bg-green-400'
+                                        : i === captureIndex
+                                            ? 'bg-cyan-400 animate-pulse'
+                                            : 'bg-white/20'
                                         }`}
                                 />
                             ))}
                         </div>
 
-                        <div className="flex flex-col gap-3">
-                            <Button onClick={handleCapture} disabled={isCapturing}>
-                                {isCapturing ? 'Detecting…' : `Capture ${currentGuide.label}`}
-                            </Button>
-                            <Button variant="secondary" onClick={handleCancel}>
-                                Cancel
-                            </Button>
-                        </div>
+                        <p className="text-white/20 text-xs tracking-wide animate-breathe">
+                            {isCapturing ? 'Detecting face...' : 'Auto-capturing...'}
+                        </p>
                     </div>
                 )}
 
@@ -316,29 +317,26 @@ export function EnrollmentView() {
                 {/* ── Success Step ─────────────────────────────────── */}
                 {step === 'success' && (
                     <div className="text-center">
-                        <div className="text-6xl mb-4">🎉</div>
-                        <h2 className="text-2xl font-light text-white mb-2">
-                            Welcome, <span className="text-cyan-400 font-medium">{name}</span>!
+                        <div className="w-16 h-16 mx-auto mb-4 rounded-full border border-emerald-400/30 flex items-center justify-center">
+                            <span className="text-emerald-400 text-2xl">{'\u2713'}</span>
+                        </div>
+                        <h2 className="text-xl font-light text-white/90 mb-2 tracking-wide">
+                            Welcome, <span className="text-cyan-400">{name}</span>
                         </h2>
                         {qualityScore !== null && (
-                            <p className="text-white/50 text-sm mb-2">
-                                Face quality score:{' '}
-                                <span className={qualityScore >= 0.8 ? 'text-green-400' : 'text-yellow-400'}>
+                            <p className="text-white/30 text-xs mb-2">
+                                Face quality:{' '}
+                                <span className={qualityScore >= 0.8 ? 'text-emerald-400' : 'text-yellow-400'}>
                                     {(qualityScore * 100).toFixed(0)}%
                                 </span>
                             </p>
                         )}
-                        <p className="text-white/60 mb-8">
-                            Your profile is ready. The mirror will now recognize you automatically!
+                        <p className="text-white/40 text-sm mb-4">
+                            Your profile is ready. The mirror will recognize you automatically.
                         </p>
-                        <div className="flex flex-col gap-3">
-                            <Button onClick={() => setView('analysis')}>
-                                Start Analysis
-                            </Button>
-                            <Button variant="secondary" onClick={() => setView('idle')}>
-                                Return to Mirror
-                            </Button>
-                        </div>
+                        <p className="text-white/20 text-xs tracking-wide animate-breathe">
+                            Going to dashboard shortly...
+                        </p>
                     </div>
                 )}
 
@@ -349,10 +347,10 @@ export function EnrollmentView() {
                             <div
                                 key={s}
                                 className={`w-2 h-2 rounded-full transition-colors ${step === s
-                                        ? 'bg-cyan-400'
-                                        : ['welcome', 'name', 'capture', 'processing', 'success'].indexOf(step) > i
-                                            ? 'bg-white/60'
-                                            : 'bg-white/20'
+                                    ? 'bg-cyan-400'
+                                    : ['welcome', 'name', 'capture', 'processing', 'success'].indexOf(step) > i
+                                        ? 'bg-white/60'
+                                        : 'bg-white/20'
                                     }`}
                             />
                         )

@@ -11,6 +11,7 @@ import time
 import logging
 import cv2
 import threading
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 import requests
 import uvicorn
@@ -130,22 +131,23 @@ SERVICES = {
     "thermal": 8006
 }
 
-app = FastAPI(title="Clarity+ Orchestrator")
 logger = logging.getLogger("orchestrator")
 logging.basicConfig(level=logging.INFO)
 
-@app.on_event("startup")
-def startup():
+
+@asynccontextmanager
+async def lifespan(app):
     logger.info("Starting Camera...")
     if camera.start():
         logger.info("Camera started.")
     else:
         logger.error("Failed to start camera.")
-
-@app.on_event("shutdown")
-def shutdown():
+    yield
     logger.info("Stopping Camera...")
     camera.stop()
+
+
+app = FastAPI(title="Clarity+ Orchestrator", lifespan=lifespan)
 
 class AnalyzePayload(BaseModel):
     image: Optional[str] = None  # base64-encoded JPEG from frontend

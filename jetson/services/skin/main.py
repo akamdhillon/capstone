@@ -12,18 +12,33 @@ logger = logging.getLogger("service.skin")
 _inference_system = None
 _MODEL_PATH = Path(__file__).parent / "checkpoints" / "best_model.pth"
 
+def _is_lfs_pointer(path: Path) -> bool:
+    """Return True if the file is a Git LFS pointer instead of real binary data."""
+    try:
+        with open(path, "rb") as f:
+            header = f.read(64)
+        return header.startswith(b"version https://git-lfs.github.com")
+    except Exception:
+        return False
+
 def _load_model():
     global _inference_system
     try:
         from inference import AcneInferenceSystem
-        if _MODEL_PATH.exists():
-            logger.info(f"Loading acne model from {_MODEL_PATH}")
-            _inference_system = AcneInferenceSystem(str(_MODEL_PATH))
-            logger.info("Acne model loaded successfully")
-        else:
+        if not _MODEL_PATH.exists():
             logger.warning(f"Model checkpoint not found at {_MODEL_PATH}, will use fallback")
+            return
+        if _is_lfs_pointer(_MODEL_PATH):
+            logger.warning(
+                f"Model file is a Git LFS pointer, not actual weights. "
+                f"Run 'git lfs pull' to download the real checkpoint. Using fallback."
+            )
+            return
+        logger.info(f"Loading acne model from {_MODEL_PATH}")
+        _inference_system = AcneInferenceSystem(str(_MODEL_PATH))
+        logger.info("Acne model loaded successfully")
     except Exception as e:
-        logger.error(f"Failed to load acne model: {e}", exc_info=True)
+        logger.error(f"Failed to load acne model: {e}")
         _inference_system = None
 
 _load_model()

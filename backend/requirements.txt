@@ -4,3 +4,6 @@ pydantic>=2.5.0
 httpx>=0.25.0
 python-dotenv>=1.0.0
 ollama>=0.4.0
+vosk>=0.3.42
+sounddevice>=0.4.6
+pyttsx3>=2.90

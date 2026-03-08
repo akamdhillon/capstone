@@ -1,11 +1,15 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { API_BASE_URL } from '../config';
 import { Clock } from '../components/Clock';
 import { useApp } from '../context/AppContext';
 import { detectFace, recognizeFace } from '../services/api';
 
 export function IdleView() {
-    const { setView, setCurrentUser, setWebcamFrame, triggerRecognition, setTriggerRecognition } = useApp();
+    const {
+        setView, setCurrentUser, setWebcamFrame, setGreeting,
+        triggerRecognition, setTriggerRecognition,
+        systemStatus,
+    } = useApp();
+
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
@@ -38,10 +42,18 @@ export function IdleView() {
         return dataUrl.split(',')[1];
     }, []);
 
+    const getGreetingPrefix = () => {
+        const hour = new Date().getHours();
+        if (hour < 12) return 'Good morning';
+        if (hour < 17) return 'Good afternoon';
+        return 'Good evening';
+    };
+
     const handleRecognize = async () => {
+        if (isRecognizing) return;
         setIsRecognizing(true);
         setShowCamera(true);
-        setRecognizeStatus('Starting camera…');
+        setRecognizeStatus('Starting camera...');
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -60,7 +72,7 @@ export function IdleView() {
             });
             await new Promise((r) => setTimeout(r, 800));
 
-            setRecognizeStatus('Looking for your face…');
+            setRecognizeStatus('Looking for your face...');
 
             let b64: string | null = null;
             for (let attempt = 0; attempt < 3; attempt++) {
@@ -79,52 +91,59 @@ export function IdleView() {
                     b64 = frame;
                     break;
                 }
-                setRecognizeStatus(`Adjusting… (attempt ${attempt + 2}/3)`);
+                setRecognizeStatus(`Adjusting... (attempt ${attempt + 2}/3)`);
                 await new Promise((r) => setTimeout(r, 700));
             }
 
             if (!b64) {
-                setRecognizeStatus('No face detected. Position your face in the frame.');
+                setRecognizeStatus('No face detected');
+                await new Promise((r) => setTimeout(r, 2000));
+                setRecognizeStatus(null);
                 stopCamera();
                 setIsRecognizing(false);
                 return;
             }
 
-            setRecognizeStatus('Identifying…');
+            setRecognizeStatus('Identifying...');
             const result = await recognizeFace(b64);
             stopCamera();
 
             if (result.match && result.name) {
-                setRecognizeStatus(`Welcome back, ${result.name}!`);
+                const greetMsg = `${getGreetingPrefix()}, ${result.name}.`;
+                setGreeting(greetMsg);
+                setRecognizeStatus(greetMsg);
                 setWebcamFrame(b64);
                 setCurrentUser({
                     id: result.user_id ?? crypto.randomUUID(),
                     name: result.name,
                     created_at: new Date().toISOString(),
                 });
-                await new Promise((r) => setTimeout(r, 1200));
-                setView('analysis');
+                await new Promise((r) => setTimeout(r, 1500));
+                setView('dashboard');
             } else if (result.match_type === 'no_users') {
-                setRecognizeStatus('No enrolled users. Please enroll first.');
+                setRecognizeStatus('No enrolled users');
+                await new Promise((r) => setTimeout(r, 2000));
+                setRecognizeStatus(null);
             } else if (result.match_type === 'no_face') {
-                setRecognizeStatus('No face detected. Try again.');
+                setRecognizeStatus('No face detected');
+                await new Promise((r) => setTimeout(r, 2000));
+                setRecognizeStatus(null);
             } else {
-                setRecognizeStatus(
-                    result.confidence > 0
-                        ? `Not recognized (${(result.confidence * 100).toFixed(0)}% match). Try again or enroll.`
-                        : 'Face not recognized. Try again or enroll.'
-                );
+                setRecognizeStatus('Face not recognized');
+                await new Promise((r) => setTimeout(r, 2000));
+                setRecognizeStatus(null);
             }
         } catch (err) {
             console.error('Recognition failed:', err);
-            setRecognizeStatus('Recognition failed. Check that services are running.');
+            setRecognizeStatus('Recognition unavailable');
             stopCamera();
+            await new Promise((r) => setTimeout(r, 2000));
+            setRecognizeStatus(null);
         }
 
         setIsRecognizing(false);
     };
 
-    // ── Voice-triggered Recognition ──
     useEffect(() => {
         if (triggerRecognition && !isRecognizing) {
             setTriggerRecognition(false);
@@ -133,129 +152,55 @@ export function IdleView() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [triggerRecognition, isRecognizing, setTriggerRecognition]);
 
-    const handleCancel = () => {
-        stopCamera();
-        setIsRecognizing(false);
-        setRecognizeStatus(null);
-    };
-
-    const handleDismissStatus = () => setRecognizeStatus(null);
+    const statusDotColor = (() => {
+        if (isRecognizing) return 'bg-cyan-400 animate-pulse';
+        if (systemStatus === 'connected') return 'bg-white/20 animate-status-breathe';
+        if (systemStatus === 'error') return 'bg-red-400/60';
+        return 'bg-white/10';
+    })();
 
     return (
-        <div className="min-h-screen bg-black flex flex-col items-center justify-center relative">
-            {/* Clock */}
-            <Clock showDate className="mb-16" />
+        <div className="min-h-screen bg-black flex flex-col items-center justify-center relative select-none">
 
-            {/* Camera preview overlay during recognition */}
+            {/* Camera overlay during recognition */}
             {showCamera && (
-                <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center animate-fade-in">
+                <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center animate-fade-in">
                     <div className="relative rounded-2xl overflow-hidden mb-6" style={{ width: 320, height: 240 }}>
                         <video
                             ref={videoRef}
-                            autoPlay
-                            playsInline
-                            muted
+                            autoPlay playsInline muted
                             className="w-full h-full object-cover"
                             style={{ transform: 'scaleX(-1)' }}
                         />
-                        <div className="absolute inset-0 rounded-2xl border-4 border-cyan-400/40 animate-pulse pointer-events-none" />
+                        <div className="absolute inset-0 rounded-2xl border border-cyan-400/20 pointer-events-none" />
+                        <div className="absolute inset-0 rounded-2xl pointer-events-none"
+                            style={{ boxShadow: 'inset 0 0 60px rgba(0,0,0,0.5)' }} />
                     </div>
-                    <p className="text-white/70 text-sm mb-2">
-                        {recognizeStatus || 'Recognizing…'}
+                    <p className="text-white/50 text-sm tracking-wide">
+                        {recognizeStatus || 'Recognizing...'}
                     </p>
-                    <div className="w-5 h-5 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin mb-4" />
-                    <button
-                        onClick={handleCancel}
-                        className="text-white/40 hover:text-white/70 text-sm transition-colors"
-                    >
-                        Cancel
-                    </button>
+                    <div className="mt-4 w-6 h-6 border-2 border-white/10 border-t-cyan-400/60 rounded-full animate-spin" />
                 </div>
             )}
 
-            {/* Recognize Me button */}
-            <button
-                onClick={handleRecognize}
-                disabled={isRecognizing}
-                className={`
-                    px-8 py-4 rounded-2xl text-lg font-medium transition-all duration-300
-                    ${isRecognizing
-                        ? 'bg-cyan-400/10 text-cyan-400/60 cursor-wait border border-cyan-400/30'
-                        : 'bg-white/5 hover:bg-cyan-400/10 text-white/70 hover:text-cyan-400 border border-white/10 hover:border-cyan-400/40 hover:shadow-[0_0_30px_rgba(34,211,238,0.15)]'
-                    }
-                `}
-            >
-                {isRecognizing ? (
-                    <span className="flex items-center gap-3">
-                        <span className="w-5 h-5 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
-                        Recognizing…
-                    </span>
-                ) : (
-                    <span className="flex items-center gap-3">
-                        <span className="text-2xl">👤</span>
-                        Recognize Me
-                    </span>
-                )}
-            </button>
+            {/* Clock — centered */}
+            <div className="animate-fade-in-slow">
+                <Clock showDate />
+            </div>
 
-            {/* Status message (when not recognizing) */}
-            {!isRecognizing && recognizeStatus && (
-                <button
-                    onClick={handleDismissStatus}
-                    className="mt-4 text-white/50 text-sm animate-fade-in hover:text-white/70 transition-colors"
-                >
-                    {recognizeStatus} <span className="text-white/30 ml-1">✕</span>
-                </button>
+            {/* Status dot — top-right corner */}
+            <div className="absolute top-8 right-8 flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${statusDotColor} transition-colors duration-700`} />
+            </div>
+
+            {/* Status message */}
+            {recognizeStatus && !showCamera && (
+                <p className="mt-8 text-white/40 text-sm animate-fade-in tracking-wide z-20">
+                    {recognizeStatus}
+                </p>
             )}
 
-            {/* Voice Test Button */}
-            <button
-                onClick={async () => {
-                    try {
-                        await fetch(`${API_BASE_URL}/api/voice/status`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ state: 'LISTENING', user_id: 'nikunj', display_name: 'Nikunj' })
-                        });
-                        setTimeout(async () => {
-                            await fetch(`${API_BASE_URL}/api/voice/status`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ state: 'PROCESSING', user_id: 'nikunj', display_name: 'Nikunj' })
-                            });
-                        }, 2000);
-                        setTimeout(async () => {
-                            await fetch(`${API_BASE_URL}/api/voice/status`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ state: 'SPEAKING', user_id: 'nikunj', display_name: 'Nikunj' })
-                            });
-                        }, 5000);
-                        setTimeout(async () => {
-                            await fetch(`${API_BASE_URL}/api/voice/status`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ state: 'IDLE' })
-                            });
-                        }, 8000);
-                    } catch (err) {
-                        console.error('Failed to trigger voice test:', err);
-                    }
-                }}
-                className="mt-8 px-6 py-2 rounded-xl bg-white/5 border border-white/10 text-white/40 text-sm hover:text-white/70 hover:bg-white/10 transition-all"
-            >
-                🎙️ Try Voice Mode
-            </button>
-
-            {/* Posture Check Button */}
-            <button
-                onClick={() => setView('posture')}
-                className="mt-3 px-6 py-2 rounded-xl bg-white/5 border border-white/10 text-white/40 text-sm hover:text-white/70 hover:bg-white/10 transition-all"
-            >
-                🧘 Check Posture
-            </button>
-
-            {/* Off-screen canvas + fallback video for frame capture */}
+            {/* Hidden elements for camera capture */}
             {!showCamera && (
                 <video ref={videoRef} autoPlay playsInline muted
                     className="fixed opacity-0 pointer-events-none"
@@ -263,22 +208,6 @@ export function IdleView() {
                 />
             )}
             <canvas ref={canvasRef} className="fixed opacity-0 pointer-events-none" style={{ top: -9999 }} />
-
-            {/* Subtle prompt */}
-            <p className="absolute bottom-20 text-white/20 text-sm animate-pulse-subtle tracking-wide">
-                Tap above to identify yourself
-            </p>
-
-            {/* Enrollment link */}
-            <button
-                onClick={(e) => {
-                    e.stopPropagation();
-                    setView('enrollment');
-                }}
-                className="absolute bottom-8 text-white/20 hover:text-white/40 text-sm transition-colors"
-            >
-                New user? Tap to enroll
-            </button>
         </div>
     );
 }

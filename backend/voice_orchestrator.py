@@ -113,7 +113,7 @@ async def process_voice_intent(request: VoiceIntentRequest):
 
     try:
         response = ollama.chat(
-            model='llama3.2:1b',
+            model=settings.OLLAMA_MODEL,
             messages=messages,
             options={'temperature': 0.1},
             format='json'
@@ -187,6 +187,22 @@ async def process_voice_intent(request: VoiceIntentRequest):
         # Recognition triggers
         if intent == "RECOGNIZE_USER":
             await _broadcast_action("recognize")
+
+        # Summary triggers
+        if intent == "DAILY_SUMMARY":
+            await _broadcast_nav("summary")
+
+        # Eye check triggers
+        if intent == "EYE_CHECK":
+            await _broadcast_nav("eyes")
+
+        # Skin check triggers
+        if intent == "SKIN_CHECK":
+            await _broadcast_nav("skin")
+
+        # Dashboard triggers
+        if intent == "DASHBOARD":
+            await _broadcast_nav("dashboard")
 
         return VoiceIntentResponse(
             assistant_message=assistant_msg,

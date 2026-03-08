@@ -118,6 +118,7 @@ logs/
 # *.avi
 # *.mov
 snapshots/
+vosk-model*/
 
 # ==========================================
 # Misc

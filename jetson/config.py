@@ -8,6 +8,9 @@ env_path = Path(__file__).resolve().parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
 class Settings:
+    # Deployment Target
+    JETSON_TARGET = os.getenv("JETSON_TARGET")
+
     # Network
     JETSON_IP = os.getenv("JETSON_IP")
     RPI_IP = os.getenv("RPI_IP")
