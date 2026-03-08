@@ -209,10 +209,10 @@ def run_posture_analysis(duration_sec: int = 5) -> dict:
     # Build recommendations
     recommendations = []
     if neck_status in ("moderate", "poor"):
-        recommendations.append("Forward head detected — practice chin tucks")
+        recommendations.append("Forward head detected - practice chin tucks")
         recommendations.append("Check screen height (should be at eye level)")
     if torso_status in ("moderate", "poor"):
-        recommendations.append("Slouching detected — sit or stand more upright")
+        recommendations.append("Slouching detected - sit or stand more upright")
         recommendations.append("Engage core muscles and retract shoulder blades")
 
     # Overall status (BOTH must be good)

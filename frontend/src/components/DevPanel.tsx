@@ -128,7 +128,7 @@ export function DevPanel() {
                                 <div className="flex items-center justify-between">
                                     <span className="text-white/60 text-sm">Overall Score</span>
                                     <span className={`text-2xl font-bold ${getScoreColor(result.overall_score)}`}>
-                                        {result.overall_score?.toFixed(0) ?? '—'}
+                                        {result.overall_score?.toFixed(0) ?? '-'}
                                     </span>
                                 </div>
                             </div>
@@ -139,7 +139,7 @@ export function DevPanel() {
                                     <div key={metric} className="bg-white/5 rounded-lg p-2 text-center">
                                         <p className="text-white/40 text-xs uppercase">{metric}</p>
                                         <p className={`text-lg font-semibold ${getScoreColor(result.scores[metric])}`}>
-                                            {result.scores[metric]?.toFixed(0) ?? '—'}
+                                            {result.scores[metric]?.toFixed(0) ?? '-'}
                                         </p>
                                     </div>
                                 ))}

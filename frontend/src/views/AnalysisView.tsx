@@ -56,7 +56,7 @@ export function AnalysisView() {
             {isLoading ? (
                 <div className="flex flex-col items-center animate-fade-in">
                     <div className="w-20 h-20 border-4 border-white/20 border-t-cyan-400 rounded-full animate-spin mb-6" />
-                    <p className="text-white/60 text-lg">Analyzing wellness…</p>
+                    <p className="text-white/60 text-lg">Analyzing wellness...</p>
                 </div>
             ) : error ? (
                 // Error state

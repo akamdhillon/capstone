@@ -157,5 +157,303 @@
     ],
     "frames_analyzed": 300,
     "timestamp": "2026-03-04T16:35:46.505274"
+  },
+  {
+    "score": 25,
+    "status": "poor",
+    "neck_angle": 24.5,
+    "torso_angle": 8.4,
+    "neck_status": "poor",
+    "torso_status": "poor",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 108,
+    "timestamp": "2026-03-06T23:10:06.664462"
+  },
+  {
+    "score": 27,
+    "status": "poor",
+    "neck_angle": 23.5,
+    "torso_angle": 9.0,
+    "neck_status": "poor",
+    "torso_status": "poor",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 161,
+    "timestamp": "2026-03-06T23:10:47.514472"
+  },
+  {
+    "score": 28,
+    "status": "poor",
+    "neck_angle": 22.9,
+    "torso_angle": 5.6,
+    "neck_status": "poor",
+    "torso_status": "moderate",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 191,
+    "timestamp": "2026-03-06T23:14:34.071896"
+  },
+  {
+    "score": 20,
+    "status": "poor",
+    "neck_angle": 30.9,
+    "torso_angle": 5.3,
+    "neck_status": "poor",
+    "torso_status": "moderate",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 161,
+    "timestamp": "2026-03-06T23:19:02.646481"
+  },
+  {
+    "score": 47,
+    "status": "poor",
+    "neck_angle": 13.5,
+    "torso_angle": 8.1,
+    "neck_status": "poor",
+    "torso_status": "poor",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 297,
+    "timestamp": "2026-03-06T23:27:33.486174"
+  },
+  {
+    "score": 45,
+    "status": "poor",
+    "neck_angle": 14.3,
+    "torso_angle": 5.6,
+    "neck_status": "poor",
+    "torso_status": "moderate",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 298,
+    "timestamp": "2026-03-06T23:32:43.103448"
+  },
+  {
+    "score": 30,
+    "status": "poor",
+    "neck_angle": 22.0,
+    "torso_angle": 9.7,
+    "neck_status": "poor",
+    "torso_status": "poor",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 294,
+    "timestamp": "2026-03-06T23:33:26.437057"
+  },
+  {
+    "score": 25,
+    "status": "poor",
+    "neck_angle": 24.7,
+    "torso_angle": 7.9,
+    "neck_status": "poor",
+    "torso_status": "moderate",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 300,
+    "timestamp": "2026-03-06T23:41:12.108645"
+  },
+  {
+    "score": 25,
+    "status": "poor",
+    "neck_angle": 24.7,
+    "torso_angle": 8.4,
+    "neck_status": "poor",
+    "torso_status": "poor",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 301,
+    "timestamp": "2026-03-06T23:46:41.298122"
+  },
+  {
+    "score": 43,
+    "status": "poor",
+    "neck_angle": 15.6,
+    "torso_angle": 3.3,
+    "neck_status": "poor",
+    "torso_status": "good",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)"
+    ],
+    "frames_analyzed": 301,
+    "timestamp": "2026-03-07T00:11:14.044659"
+  },
+  {
+    "score": 20,
+    "status": "poor",
+    "neck_angle": 30.0,
+    "torso_angle": 10.6,
+    "neck_status": "poor",
+    "torso_status": "poor",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 296,
+    "timestamp": "2026-03-07T00:15:46.645186"
+  },
+  {
+    "score": 27,
+    "status": "poor",
+    "neck_angle": 23.4,
+    "torso_angle": 7.5,
+    "neck_status": "poor",
+    "torso_status": "moderate",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 296,
+    "timestamp": "2026-03-07T00:17:24.554773"
+  },
+  {
+    "score": 26,
+    "status": "poor",
+    "neck_angle": 24.1,
+    "torso_angle": 5.9,
+    "neck_status": "poor",
+    "torso_status": "moderate",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 298,
+    "timestamp": "2026-03-07T00:50:19.595508"
+  },
+  {
+    "score": 20,
+    "status": "poor",
+    "neck_angle": 28.1,
+    "torso_angle": 5.1,
+    "neck_status": "poor",
+    "torso_status": "moderate",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 300,
+    "timestamp": "2026-03-07T00:50:49.747260"
+  },
+  {
+    "score": 20,
+    "status": "poor",
+    "neck_angle": 34.8,
+    "torso_angle": 4.3,
+    "neck_status": "poor",
+    "torso_status": "good",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)"
+    ],
+    "frames_analyzed": 299,
+    "timestamp": "2026-03-07T00:54:25.881108"
+  },
+  {
+    "score": 22,
+    "status": "poor",
+    "neck_angle": 25.9,
+    "torso_angle": 8.1,
+    "neck_status": "poor",
+    "torso_status": "poor",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 300,
+    "timestamp": "2026-03-07T00:55:58.247922"
+  },
+  {
+    "score": 31,
+    "status": "poor",
+    "neck_angle": 21.3,
+    "torso_angle": 8.0,
+    "neck_status": "poor",
+    "torso_status": "poor",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 300,
+    "timestamp": "2026-03-07T00:58:05.094168"
+  },
+  {
+    "score": 31,
+    "status": "poor",
+    "neck_angle": 21.4,
+    "torso_angle": 3.1,
+    "neck_status": "poor",
+    "torso_status": "good",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)"
+    ],
+    "frames_analyzed": 298,
+    "timestamp": "2026-03-07T01:07:55.825725"
+  },
+  {
+    "score": 45,
+    "status": "poor",
+    "neck_angle": 14.7,
+    "torso_angle": 7.0,
+    "neck_status": "poor",
+    "torso_status": "moderate",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 300,
+    "timestamp": "2026-03-07T01:10:26.013933"
   }
 ]

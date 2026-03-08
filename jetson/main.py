@@ -164,7 +164,7 @@ async def analyze_endpoint(payload: AnalyzePayload = None):
     filename = f"snapshot_{timestamp}.jpg"
     filepath = os.path.join(SNAPSHOT_DIR, filename)
 
-    # 1. Acquire image — prefer base64 payload, fall back to camera
+    # 1. Acquire image - prefer base64 payload, fall back to camera
     if payload and payload.image:
         try:
             img_bytes = base64.b64decode(payload.image)

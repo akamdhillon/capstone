@@ -67,7 +67,7 @@ class AnalysisRequest(BaseModel):
 def load_models():
     """Load InsightFace models once at boot."""
     global face_app
-    logger.info("Loading InsightFace models (buffalo_l) …")
+    logger.info("Loading InsightFace models (buffalo_l) ...")
     t0 = time.time()
 
     face_app = FaceAnalysis(
