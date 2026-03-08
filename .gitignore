@@ -119,6 +119,7 @@ logs/
 # *.mov
 snapshots/
 vosk-model*/
+pose_landmarker*.task
 
 # ==========================================
 # Misc

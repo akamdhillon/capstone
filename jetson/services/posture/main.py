@@ -12,6 +12,8 @@ import os
 import time
 import math
 import logging
+import urllib.request
+from pathlib import Path
 from dataclasses import dataclass, asdict
 from collections import deque
 from typing import Optional
@@ -19,6 +21,8 @@ from typing import Optional
 import cv2
 import numpy as np
 import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -27,6 +31,34 @@ from pydantic import BaseModel
 # ---------------------------------------------------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("service.posture")
+
+# ---------------------------------------------------------------------------
+# Pose Landmark indices (same as legacy MediaPipe Pose)
+# ---------------------------------------------------------------------------
+LEFT_SHOULDER = 11
+RIGHT_SHOULDER = 12
+LEFT_EAR = 7
+RIGHT_EAR = 8
+LEFT_HIP = 23
+RIGHT_HIP = 24
+
+# ---------------------------------------------------------------------------
+# Model path
+# ---------------------------------------------------------------------------
+_SERVICE_DIR = Path(__file__).parent.resolve()
+_MODEL_PATH = _SERVICE_DIR / "pose_landmarker_lite.task"
+_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+
+
+def _ensure_model():
+    """Download pose landmarker model if not present."""
+    if _MODEL_PATH.exists():
+        return str(_MODEL_PATH)
+    logger.info(f"Downloading pose landmarker model to {_MODEL_PATH}...")
+    urllib.request.urlretrieve(_MODEL_URL, _MODEL_PATH)
+    logger.info("Model downloaded.")
+    return str(_MODEL_PATH)
+
 
 # ---------------------------------------------------------------------------
 # FastAPI app
@@ -75,24 +107,26 @@ class RunPostureRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# MediaPipe Setup (loaded once)
+# MediaPipe Tasks Setup (loaded once)
 # ---------------------------------------------------------------------------
-mp_pose = mp.solutions.pose
-pose_detector: Optional[mp.solutions.pose.Pose] = None
+pose_landmarker: Optional[vision.PoseLandmarker] = None
 
 
 @app.on_event("startup")
 def load_models():
-    global pose_detector
-    logger.info("Loading MediaPipe Pose model...")
+    global pose_landmarker
+    logger.info("Loading MediaPipe Pose Landmarker (Tasks API)...")
     t0 = time.time()
-    pose_detector = mp_pose.Pose(
-        static_image_mode=False,
-        model_complexity=1,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5,
+    model_path = _ensure_model()
+    base_options = python.BaseOptions(model_asset_path=model_path)
+    options = vision.PoseLandmarkerOptions(
+        base_options=base_options,
+        running_mode=vision.RunningMode.IMAGE,
+        min_pose_detection_confidence=0.5,
+        min_pose_presence_confidence=0.5,
     )
-    logger.info(f"Pose model loaded in {time.time() - t0:.1f}s")
+    pose_landmarker = vision.PoseLandmarker.create_from_options(options)
+    logger.info(f"Pose landmarker loaded in {time.time() - t0:.1f}s")
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +134,7 @@ def load_models():
 # ---------------------------------------------------------------------------
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "posture", "model_loaded": pose_detector is not None}
+    return {"status": "ok", "service": "posture", "model_loaded": pose_landmarker is not None}
 
 
 # ---------------------------------------------------------------------------
@@ -130,22 +164,20 @@ def assess_status(angle, good_thresh, mod_thresh):
         return "poor"
 
 
-def analyze_frame(landmarks, w, h):
+def analyze_frame_from_landmarks(landmarks, w, h):
     """
-    Analyze a single frame's pose landmarks.
+    Analyze a single frame's pose landmarks (list of NormalizedLandmark).
     Returns (neck_angle, torso_angle) or None if landmarks insufficient.
     """
+    if len(landmarks) < 24:
+        return None
     lm = landmarks
-    lmPose = mp_pose.PoseLandmark
-
-    l_shldr_x = int(lm[lmPose.LEFT_SHOULDER].x * w)
-    l_shldr_y = int(lm[lmPose.LEFT_SHOULDER].y * h)
-    r_shldr_x = int(lm[lmPose.RIGHT_SHOULDER].x * w)
-    r_shldr_y = int(lm[lmPose.RIGHT_SHOULDER].y * h)
-    l_ear_x = int(lm[lmPose.LEFT_EAR].x * w)
-    l_ear_y = int(lm[lmPose.LEFT_EAR].y * h)
-    l_hip_x = int(lm[lmPose.LEFT_HIP].x * w)
-    l_hip_y = int(lm[lmPose.LEFT_HIP].y * h)
+    l_shldr_x = lm[LEFT_SHOULDER].x * w
+    l_shldr_y = lm[LEFT_SHOULDER].y * h
+    l_ear_x = lm[LEFT_EAR].x * w
+    l_ear_y = lm[LEFT_EAR].y * h
+    l_hip_x = lm[LEFT_HIP].x * w
+    l_hip_y = lm[LEFT_HIP].y * h
 
     neck_angle = calculate_angle(l_shldr_x, l_shldr_y, l_ear_x, l_ear_y)
     torso_angle = calculate_angle(l_hip_x, l_hip_y, l_shldr_x, l_shldr_y)
@@ -153,15 +185,27 @@ def analyze_frame(landmarks, w, h):
     return neck_angle, torso_angle
 
 
+def _detect_pose(landmarker, rgb_image):
+    """Run pose detection on an RGB numpy array. Returns pose_landmarks or None."""
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
+    result = landmarker.detect(mp_image)
+    if result.pose_landmarks and len(result.pose_landmarks) > 0:
+        return result.pose_landmarks[0]
+    return None
+
+
 def run_posture_analysis(duration_sec: int = 5) -> dict:
     """
     Run a timed posture analysis session using the camera.
     Captures frames for `duration_sec`, analyzes each, returns aggregated result.
     """
+    if pose_landmarker is None:
+        return {"service": "posture", "error": "Model not loaded", "score": 0}
+
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         logger.error("Camera not available")
-        return {"error": "Camera not available", "score": 0}
+        return {"service": "posture", "error": "Camera not available", "score": 0}
 
     neck_angles = deque(maxlen=config.SMOOTHING_WINDOW * 10)
     torso_angles = deque(maxlen=config.SMOOTHING_WINDOW * 10)
@@ -178,10 +222,10 @@ def run_posture_analysis(duration_sec: int = 5) -> dict:
 
             h, w, _ = frame.shape
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            result = pose_detector.process(rgb)
+            landmarks = _detect_pose(pose_landmarker, rgb)
 
-            if result.pose_landmarks:
-                angles = analyze_frame(result.pose_landmarks.landmark, w, h)
+            if landmarks:
+                angles = analyze_frame_from_landmarks(landmarks, w, h)
                 if angles:
                     neck_angles.append(angles[0])
                     torso_angles.append(angles[1])
@@ -194,6 +238,7 @@ def run_posture_analysis(duration_sec: int = 5) -> dict:
 
     if frame_count < 3:
         return {
+            "service": "posture",
             "error": "Not enough frames with visible pose",
             "score": 0,
             "frames_analyzed": frame_count,
@@ -267,16 +312,19 @@ async def analyze(request: AnalysisRequest):
     """Legacy endpoint for orchestrator compatibility."""
     logger.info(f"Analyze posture for: {request.image_path or 'camera'}")
 
+    if pose_landmarker is None:
+        return {"service": "posture", "score": 0, "details": {"error": "Model not loaded"}}
+
     # If an image_path is provided, analyze that single frame
     if request.image_path and os.path.exists(request.image_path):
         img = cv2.imread(request.image_path)
         if img is not None:
             h, w, _ = img.shape
             rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            result = pose_detector.process(rgb)
+            landmarks = _detect_pose(pose_landmarker, rgb)
 
-            if result.pose_landmarks:
-                angles = analyze_frame(result.pose_landmarks.landmark, w, h)
+            if landmarks:
+                angles = analyze_frame_from_landmarks(landmarks, w, h)
                 if angles:
                     neck_status = assess_status(angles[0], config.NECK_GOOD, config.NECK_MODERATE)
                     torso_status = assess_status(angles[1], config.TORSO_GOOD, config.TORSO_MODERATE)

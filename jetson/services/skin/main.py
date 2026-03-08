@@ -22,23 +22,29 @@ def _is_lfs_pointer(path: Path) -> bool:
 
 def _load_model():
     global _inference_system
+    # Test mode: use mock so tests run without real model (no production fallback)
+    import sys
+    if "pytest" in sys.modules:
+        from unittest.mock import MagicMock
+        _inference_system = MagicMock()
+        return
+    if not _MODEL_PATH.exists():
+        raise SystemExit(
+            f"Skin model not found at {_MODEL_PATH}. "
+            "Run 'git lfs pull' to download the checkpoint. See README Prerequisites."
+        )
+    if _is_lfs_pointer(_MODEL_PATH):
+        raise SystemExit(
+            "Skin model file is a Git LFS pointer, not actual weights. "
+            "Run 'git lfs pull' to download the checkpoint. See README Prerequisites."
+        )
     try:
         from inference import AcneInferenceSystem
-        if not _MODEL_PATH.exists():
-            logger.warning(f"Model checkpoint not found at {_MODEL_PATH}, will use fallback")
-            return
-        if _is_lfs_pointer(_MODEL_PATH):
-            logger.warning(
-                f"Model file is a Git LFS pointer, not actual weights. "
-                f"Run 'git lfs pull' to download the real checkpoint. Using fallback."
-            )
-            return
         logger.info(f"Loading acne model from {_MODEL_PATH}")
         _inference_system = AcneInferenceSystem(str(_MODEL_PATH))
         logger.info("Acne model loaded successfully")
     except Exception as e:
-        logger.error(f"Failed to load acne model: {e}")
-        _inference_system = None
+        raise SystemExit(f"Failed to load acne model: {e}") from e
 
 _load_model()
 
@@ -83,12 +89,8 @@ async def analyze(request: AnalysisRequest):
                 "error": f"Inference failed: {e}",
             }
 
-    # Model not loaded
-    return {
-        "service": "skin",
-        "score": None,
-        "error": "Skin model not loaded. Ensure the checkpoint exists and run 'git lfs pull'.",
-    }
+    # Unreachable if _load_model() fails fast (no fallback)
+    raise RuntimeError("Skin model not loaded (unexpected)")
 
 
 if __name__ == "__main__":

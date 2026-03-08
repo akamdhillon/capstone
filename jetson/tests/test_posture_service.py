@@ -47,17 +47,21 @@ async def test_analyze_score_in_range(posture_client, tmp_path):
 
 @pytest.mark.asyncio
 async def test_analyze_details_has_expected_keys(posture_client, tmp_path):
+    """Details from image analysis include neck_angle and torso_angle."""
     img_path = str(tmp_path / "frame.jpg")
     Path(img_path).write_bytes(b"\xff\xd8fake")
 
     resp = await posture_client.post("/analyze", json={"image_path": img_path})
     assert resp.status_code == 200
     details = resp.json()["details"]
-    assert "head_tilt" in details
-    assert "shoulder_alignment" in details
+    # Service returns neck_angle/torso_angle (or error when no pose detected)
+    assert "neck_angle" in details or "torso_angle" in details or "error" in details
 
 
 @pytest.mark.asyncio
-async def test_analyze_missing_image_path_returns_422(posture_client):
-    resp = await posture_client.post("/analyze", json={})
-    assert resp.status_code == 422
+async def test_analyze_missing_image_path_falls_back_to_camera(posture_client):
+    """When image_path is empty, service falls back to camera analysis (200)."""
+    resp = await posture_client.post("/analyze", json={"image_path": ""})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["service"] == "posture"

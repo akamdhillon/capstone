@@ -58,6 +58,25 @@ def _setup_mediapipe_mocks():
 
     mp_mod.solutions = solutions_mod
 
+    # MediaPipe Tasks API (pose landmarker)
+    mp_mod.Image = MagicMock
+    mp_mod.ImageFormat = MagicMock()
+    mp_mod.ImageFormat.SRGB = "SRGB"
+    tasks_mod = _ensure_mock_module("mediapipe.tasks")
+    tasks_python = _ensure_mock_module("mediapipe.tasks.python")
+    tasks_vision = _ensure_mock_module("mediapipe.tasks.python.vision")
+    tasks_mod.python = tasks_python
+    tasks_python.vision = tasks_vision
+    mp_mod.tasks = tasks_mod
+
+    # PoseLandmarker and related
+    fake_landmarker = MagicMock()
+    fake_landmarker.detect = MagicMock(return_value=MagicMock(pose_landmarks=[]))
+    tasks_vision.PoseLandmarker = MagicMock(create_from_options=MagicMock(return_value=fake_landmarker))
+    tasks_vision.PoseLandmarkerOptions = MagicMock
+    tasks_vision.RunningMode = MagicMock(IMAGE="IMAGE", VIDEO="VIDEO", LIVE_STREAM="LIVE_STREAM")
+    tasks_python.BaseOptions = MagicMock
+
 
 def _setup_torch_mocks():
     if "torch" not in sys.modules:
@@ -124,19 +143,23 @@ async def thermal_client():
 
 
 # ---------------------------------------------------------------------------
-# Skin service app (model loading mocked out)
+# Skin service app (in pytest, _load_model uses a mock; no fallback path)
 # ---------------------------------------------------------------------------
 @pytest_asyncio.fixture
 async def skin_client():
     import services.skin.main as skin_mod
-    original = skin_mod._inference_system
-    skin_mod._inference_system = None
-    try:
-        transport = ASGITransport(app=skin_mod.app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            yield client
-    finally:
-        skin_mod._inference_system = original
+
+    # Configure mock for tests that use skin_client
+    mock = skin_mod._inference_system
+    mock.predict_single.return_value = {
+        "class_name": "Clear",
+        "severity_score": 0.1,
+        "confidence": 0.9,
+    }
+
+    transport = ASGITransport(app=skin_mod.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
 
 
 # ---------------------------------------------------------------------------
