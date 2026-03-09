@@ -455,5 +455,39 @@
     ],
     "frames_analyzed": 300,
     "timestamp": "2026-03-07T01:10:26.013933"
+  },
+  {
+    "score": 20,
+    "status": "poor",
+    "neck_angle": 33.4,
+    "torso_angle": 5.7,
+    "neck_status": "poor",
+    "torso_status": "moderate",
+    "recommendations": [
+      "Forward head detected \u2014 practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected \u2014 sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 438,
+    "user_id": null,
+    "timestamp": "2026-03-08T19:25:47.382647"
+  },
+  {
+    "score": 20,
+    "status": "poor",
+    "neck_angle": 38.0,
+    "torso_angle": 7.5,
+    "neck_status": "poor",
+    "torso_status": "moderate",
+    "recommendations": [
+      "Forward head detected - practice chin tucks",
+      "Check screen height (should be at eye level)",
+      "Slouching detected - sit or stand more upright",
+      "Engage core muscles and retract shoulder blades"
+    ],
+    "frames_analyzed": 122,
+    "user_id": "unknown",
+    "timestamp": "2026-03-08T20:58:03.878578"
   }
 ]

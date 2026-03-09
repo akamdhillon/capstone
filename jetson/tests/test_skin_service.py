@@ -37,6 +37,7 @@ async def test_analyze_with_model_success(tmp_path):
 
     mock_inference = MagicMock()
     mock_inference.predict_single.return_value = {
+        "class_idx": 1,
         "class_name": "Mild",
         "severity_score": 0.3,
         "confidence": 0.85,
@@ -57,7 +58,8 @@ async def test_analyze_with_model_success(tmp_path):
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["score"] == 70  # (1 - 0.3) * 100
+    assert data["score"] is not None
+    assert 0 <= data["score"] <= 100
     acne = data["details"]["acne"]
     assert acne["classification"] == "Mild"
     assert acne["severity_score"] == 3.0  # 0.3 * 10

@@ -53,8 +53,11 @@ def _setup_mediapipe_mocks():
     pose_mod.PoseLandmark = FakePoseLandmark
     pose_mod.Pose = MagicMock
 
-    solutions_mod = _ensure_mock_module("mediapipe.solutions", {"pose": pose_mod})
+    face_mesh_mod = MagicMock()
+    face_mesh_mod.FaceMesh = MagicMock
+    solutions_mod = _ensure_mock_module("mediapipe.solutions", {"pose": pose_mod, "face_mesh": face_mesh_mod})
     solutions_mod.pose = pose_mod
+    solutions_mod.face_mesh = face_mesh_mod
 
     mp_mod.solutions = solutions_mod
 
@@ -120,6 +123,15 @@ def fake_frame_b64(fake_frame_bytes):
     return base64.b64encode(fake_frame_bytes).decode("utf-8")
 
 
+@pytest.fixture
+def temp_image_path(fake_frame, tmp_path):
+    """Temporary image file path for eyes service analyze endpoint."""
+    import cv2
+    path = tmp_path / "test.jpg"
+    cv2.imwrite(str(path), fake_frame)
+    return str(path)
+
+
 # ---------------------------------------------------------------------------
 # Eyes service app
 # ---------------------------------------------------------------------------
@@ -152,6 +164,7 @@ async def skin_client():
     # Configure mock for tests that use skin_client
     mock = skin_mod._inference_system
     mock.predict_single.return_value = {
+        "class_idx": 0,
         "class_name": "Clear",
         "severity_score": 0.1,
         "confidence": 0.9,

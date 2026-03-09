@@ -215,6 +215,60 @@ async def analyze_endpoint(payload: AnalyzePayload = None):
         "results": results
     }
 
+
+class SkinRunRequest(BaseModel):
+    user_id: Optional[str] = None
+
+
+@app.post("/skin/run")
+def skin_run(request: SkinRunRequest = None):
+    """
+    Skin-only analysis: capture frame, call skin service, return result + base64 image.
+    """
+    frame = camera.get_frame()
+    if frame is None:
+        return {"service": "skin", "error": "Camera not available", "score": 0}
+
+    timestamp = int(time.time())
+    filename = f"snapshot_skin_{timestamp}.jpg"
+    filepath = os.path.join(SNAPSHOT_DIR, filename)
+    cv2.imwrite(filepath, frame)
+
+    url = f"http://localhost:{SERVICES['skin']}/analyze"
+    try:
+        resp = requests.post(url, json={"image_path": filepath}, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.error(f"Skin service call failed: {e}")
+        return {"service": "skin", "error": str(e), "score": 0}
+
+    # Add base64 image to response
+    try:
+        with open(filepath, "rb") as f:
+            data["captured_image"] = base64.b64encode(f.read()).decode("utf-8")
+    except Exception:
+        pass
+    if request and request.user_id:
+        data["user_id"] = request.user_id
+    data["images_analyzed"] = 1
+    return data
+
+
+@app.post("/capture-frame")
+async def capture_frame():
+    """
+    Capture a single frame from the camera and return as base64.
+    Used by backend for face recognition and enrollment (no image from frontend).
+    """
+    frame = camera.get_frame()
+    if frame is None:
+        return {"success": False, "error": "Camera not available", "image": None}
+    _, jpg = cv2.imencode(".jpg", frame)
+    image_b64 = base64.b64encode(jpg).decode("utf-8")
+    return {"success": True, "image": image_b64}
+
+
 if __name__ == "__main__":
     # Run the Orchestrator on Port 8001
     uvicorn.run(app, host="0.0.0.0", port=8001)

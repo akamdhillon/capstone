@@ -25,6 +25,7 @@ router = APIRouter()
 # Constants
 # ---------------------------------------------------------------------------
 FACE_SERVICE_URL = f"http://{settings.JETSON_IP}:{settings.JETSON_FACE_PORT}"
+JETSON_ORCHESTRATOR_URL = f"http://{settings.JETSON_IP}:8001"
 FACE_USERS_FILE = Path(__file__).resolve().parent.parent / "data" / "face_users.json"
 REQUEST_TIMEOUT = 30.0
 
@@ -191,6 +192,91 @@ async def recognize_face(request: RecognizeRequest):
         "match_type": result.get("match_type", "unknown"),
         "latency_ms": result.get("latency_ms"),
     }
+
+
+@router.post("/face/capture-frame")
+async def capture_frame():
+    """Capture a frame from Jetson camera. Returns base64 image for backend-driven flows."""
+    url = f"{JETSON_ORCHESTRATOR_URL}/capture-frame"
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            response = await client.post(url)
+            response.raise_for_status()
+            data = response.json()
+            if not data.get("success"):
+                raise HTTPException(status_code=503, detail=data.get("error", "Capture failed"))
+            return {"success": True, "image": data.get("image")}
+    except httpx.ConnectError:
+        raise HTTPException(status_code=503, detail=f"Cannot connect to Jetson at {url}")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Capture timed out")
+
+
+class EnrollCaptureRequest(BaseModel):
+    name: str = "New User"
+
+@router.post("/face/enroll-capture")
+async def enroll_capture(req: EnrollCaptureRequest = None):
+    """
+    Capture 3 frames from Jetson camera and enroll (Option A: timed capture).
+    Name defaults to 'New User' if not provided.
+    """
+    import asyncio
+    images = []
+    for step in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+                res = await client.post(f"{JETSON_ORCHESTRATOR_URL}/capture-frame")
+                if res.status_code == 200:
+                    data = res.json()
+                    if data.get("success") and data.get("image"):
+                        images.append(data["image"])
+        except Exception:
+            pass
+        if step < 2:
+            await asyncio.sleep(2)
+    name = (req.name if req else "").strip() or "New User"
+    if len(images) < 2:
+        return {"success": False, "error": "Could not capture enough frames", "images_captured": len(images)}
+    try:
+        result = await enroll_face(EnrollRequest(name=name, images=images))
+        return result
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/face/recognize-capture")
+async def recognize_capture():
+    """
+    Capture from Jetson camera and run face recognition.
+    No image from frontend — backend/Jetson owns camera.
+    Returns match result; broadcasts display_name/user_id via caller.
+    """
+    url = f"{JETSON_ORCHESTRATOR_URL}/capture-frame"
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            response = await client.post(url)
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.ConnectError, httpx.TimeoutException):
+        return {
+            "match": False,
+            "user_id": None,
+            "name": None,
+            "match_type": "error",
+            "message": "Camera unavailable",
+        }
+
+    if not data.get("success") or not data.get("image"):
+        return {
+            "match": False,
+            "user_id": None,
+            "name": None,
+            "match_type": "error",
+            "message": "Capture failed",
+        }
+
+    return await recognize_face(RecognizeRequest(image=data["image"]))
 
 
 @router.get("/face/users")

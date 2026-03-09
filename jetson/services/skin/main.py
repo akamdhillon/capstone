@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import logging
 import os
+import cv2
 from pathlib import Path
 
 app = FastAPI()
@@ -53,44 +54,105 @@ class AnalysisRequest(BaseModel):
     image_path: str
 
 
+def _status_from_score(score: int) -> str:
+    """Derive status from 0-100 wellness score."""
+    if score >= 80:
+        return "good"
+    if score >= 60:
+        return "moderate"
+    return "poor"
+
+
+def _run_expanded_pipeline(image_path: str) -> dict | None:
+    """Run preprocess -> regions -> analyses; return merged details or None on failure."""
+    try:
+        from preprocess import detect_face
+        from regions import extract_regions
+        from analyses import run_all_analyses
+
+        img_bgr = cv2.imread(image_path)
+        if img_bgr is None:
+            return None
+        preproc = detect_face(img_bgr)
+        regions = extract_regions(preproc)
+        analyses_result = run_all_analyses(regions)
+        return analyses_result
+    except Exception as e:
+        logger.warning(f"Expanded pipeline failed, using acne-only: {e}")
+        return None
+
+
 @app.post("/analyze")
 async def analyze(request: AnalysisRequest):
     logger.info(f"Analyzing skin for: {request.image_path}")
 
-    if _inference_system is not None:
-        try:
-            from PIL import Image
-            image = Image.open(request.image_path).convert("RGB")
-            result = _inference_system.predict_single(image)
+    if _inference_system is None:
+        raise RuntimeError("Skin model not loaded (unexpected)")
 
-            # severity_score is 0-1 (higher = worse), convert to 0-100 wellness (higher = better)
-            severity_raw = result["severity_score"]  # 0-1
-            score = round((1 - severity_raw) * 100)
+    try:
+        from PIL import Image
+        pil_image = Image.open(request.image_path).convert("RGB")
+        acne_result = _inference_system.predict_single(pil_image)
 
-            acne_details = {
-                "classification": result["class_name"],
-                "severity_score": round(severity_raw * 10, 1),  # 0-10 scale
-                "confidence": round(result["confidence"] * 100, 1),  # 0-100%
-                "score": score,
-            }
+        # severity_score 0-1 (higher = worse) -> 0-100 wellness (higher = better)
+        severity_raw = acne_result["severity_score"]
+        acne_score = round((1 - severity_raw) * 100)
+        severity_10 = round(severity_raw * 10, 1)
 
-            return {
-                "service": "skin",
-                "score": score,
-                "details": {
-                    "acne": acne_details,
-                },
-            }
-        except Exception as e:
-            logger.error(f"Acne inference failed: {e}", exc_info=True)
-            return {
-                "service": "skin",
-                "score": None,
-                "error": f"Inference failed: {e}",
-            }
+        acne_details = {
+            "classification": acne_result["class_name"],
+            "severity_score": severity_10,
+            "confidence": round(acne_result["confidence"] * 100, 1),
+            "score": acne_score,
+        }
 
-    # Unreachable if _load_model() fails fast (no fallback)
-    raise RuntimeError("Skin model not loaded (unexpected)")
+        # Run expanded pipeline (redness, oiliness, pores, etc.)
+        img_bgr = cv2.imread(request.image_path)
+        details = {"acne": acne_details}
+        if img_bgr is not None:
+            extra = _run_expanded_pipeline(request.image_path)
+            if extra:
+                details.update(extra)
+
+        # Overall score: weighted avg (acne 40%, redness 15%, oiliness 15%, pores 15%)
+        weights = {"acne": 0.40, "redness": 0.15, "oiliness": 0.15, "pores": 0.15}
+        total_w = 0
+        weighted_sum = 0
+        for k, w in weights.items():
+            if k in details and isinstance(details[k], dict) and "score" in details[k]:
+                s = details[k]["score"]
+                if s != 99:  # exclude placeholders
+                    weighted_sum += s * w
+                    total_w += w
+        if total_w > 0:
+            overall_score = round(weighted_sum / total_w)
+        else:
+            overall_score = acne_score
+
+        recommendation = _inference_system._get_recommendation(
+            acne_result["class_idx"], severity_10
+        )
+        status = _status_from_score(overall_score)
+
+        return {
+            "service": "skin",
+            "score": overall_score,
+            "status": status,
+            "classification": acne_details["classification"],
+            "severity_score": severity_10,
+            "confidence": acne_details["confidence"],
+            "recommendation": recommendation,
+            "details": details,
+            "overall_score": overall_score,
+            "images_analyzed": 1,
+        }
+    except Exception as e:
+        logger.error(f"Acne inference failed: {e}", exc_info=True)
+        return {
+            "service": "skin",
+            "score": None,
+            "error": f"Inference failed: {e}",
+        }
 
 
 if __name__ == "__main__":

@@ -50,11 +50,12 @@ except FileNotFoundError:
     SYSTEM_PROMPT = "You are a helpful wellness assistant. Always output JSON."
 
 async def _execute_jetson_action(action_name: str, params: dict, user_id: str) -> dict:
-    # Use backend API (which proxies to Jetson orchestrator /analyze) for analysis
+    # Backend-only camera: never pass image from frontend; Jetson captures.
     backend_map = {
-        "run_posture_check": f"{BACKEND_URL}/api/debug/analyze",
-        "run_acne_check": f"{BACKEND_URL}/api/debug/skin",
+        "run_posture_check": f"{BACKEND_URL}/api/posture/run",
+        "run_acne_check": f"{BACKEND_URL}/api/skin/run",
         "run_eye_strain_check": f"{BACKEND_URL}/api/debug/eyes",
+        "run_full_analysis": f"{BACKEND_URL}/api/debug/analyze",
         "run_thermal_scan": f"{BACKEND_URL}/api/debug/analyze",
     }
 
@@ -71,8 +72,9 @@ async def _execute_jetson_action(action_name: str, params: dict, user_id: str) -
         return {"error": f"Unknown action: {action_name}"}
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            payload = {"image": params.get("image")} if "image" in params else {}
+        async with httpx.AsyncClient(timeout=35.0) as client:
+            # No image - backend/Jetson owns camera
+            payload = {"user_id": user_id} if "user_id" in params else {}
             response = await client.post(url, json=payload)
             response.raise_for_status()
             return response.json()
@@ -80,58 +82,123 @@ async def _execute_jetson_action(action_name: str, params: dict, user_id: str) -
         logger.error(f"Failed backend call for {action_name}: {e}")
         return {"error": str(e)}
 
-async def _handle_broadcasts(intent: str, actions_run: list):
-    """Send navigation and action broadcasts based on the resolved intent."""
-    async def _broadcast_nav(view_name: str):
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                await client.post(f"{BACKEND_URL}/api/navigate", json={"view": view_name})
-        except Exception:
-            pass
+async def _broadcast(payload: dict):
+    """Broadcast a message to all WebSocket clients."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(f"{BACKEND_URL}/api/broadcast", json=payload)
+    except Exception:
+        pass
 
-    async def _broadcast_action(action_name: str):
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                await client.post(f"{BACKEND_URL}/api/action", json={"action": action_name})
-        except Exception:
-            pass
 
-    # Posture triggers
+async def _handle_broadcasts(intent: str, actions_run: list, request=None):
+    """Send navigation, action, and result broadcasts to the frontend."""
+    async def _broadcast_nav(view_name: str, result: dict = None):
+        p = {"navigate": view_name}
+        if result is not None:
+            p["result"] = result
+        await _broadcast(p)
+
+    # Posture: navigate first, then broadcast result when available
     posture_actions = [a for a in actions_run if hasattr(a, 'name') and a.name == "run_posture_check"]
     if posture_actions or intent == "POSTURE_CHECK":
-        await _broadcast_nav("posture")
+        await _broadcast({"navigate": "posture"})
+        for a in posture_actions:
+            if hasattr(a, 'result') and a.result and "error" not in a.result:
+                res = a.result
+                await _broadcast({"navigate": "posture", "result": {
+                    "score": res.get("score"),
+                    "status": res.get("status"),
+                    "neck_angle": res.get("neck", {}).get("angle") if isinstance(res.get("neck"), dict) else res.get("neck_angle"),
+                    "torso_angle": res.get("torso", {}).get("angle") if isinstance(res.get("torso"), dict) else res.get("torso_angle"),
+                    "neck_status": res.get("neck", {}).get("status") if isinstance(res.get("neck"), dict) else res.get("neck_status"),
+                    "torso_status": res.get("torso", {}).get("status") if isinstance(res.get("torso"), dict) else res.get("torso_status"),
+                    "recommendations": res.get("recommendations", []),
+                    "frames_analyzed": res.get("frames_analyzed", 0),
+                }})
+                break
 
-    # Home triggers
+    # Home
     if intent in ("NAVIGATE_HOME", "GO_HOME", "GO_BACK"):
-        await _broadcast_nav("idle")
-        
-    # Analysis triggers
+        await _broadcast({"navigate": "idle"})
+
+    # Full analysis: navigate + broadcast result
     if intent == "FULL_ANALYSIS":
-        await _broadcast_nav("analysis")
-        
-    # Enrollment triggers
+        await _broadcast({"navigate": "analysis"})
+        for a in actions_run:
+            if hasattr(a, 'name') and a.name == "run_full_analysis" and hasattr(a, 'result') and a.result:
+                r = a.result
+                if isinstance(r, dict) and r.get("scores") is not None:
+                    await _broadcast({"navigate": "analysis", "result": r, "scores": r.get("scores"), "overall_score": r.get("overall_score"), "captured_image": r.get("captured_image")})
+                break
+
+    # Enrollment: run capture loop in background, broadcast progress
     if intent == "ENROLL_USER":
-        await _broadcast_nav("enrollment")
-    
-    # Recognition triggers
-    if intent == "RECOGNIZE_USER":
-        await _broadcast_action("recognize")
+        await _broadcast({"navigate": "enrollment", "enrollment_start": True})
+        async def _run_enrollment():
+            import asyncio
+            images = []
+            for step in range(3):
+                try:
+                    async with httpx.AsyncClient(timeout=15.0) as c:
+                        r = await c.post(f"{BACKEND_URL}/api/face/capture-frame")
+                        if r.status_code == 200:
+                            data = r.json()
+                            if data.get("image"):
+                                images.append(data["image"])
+                except Exception:
+                    pass
+                await _broadcast({"enrollment_step": step})
+                if step < 2:
+                    await asyncio.sleep(2)
+            if len(images) >= 2:
+                try:
+                    async with httpx.AsyncClient(timeout=30.0) as c:
+                        r = await c.post(f"{BACKEND_URL}/api/face/enroll", json={"name": "New User", "images": images})
+                        res = r.json() if r.status_code == 200 else {}
+                    await _broadcast({"enrollment_result": {"success": True, "user_id": res.get("user_id"), "name": res.get("name", "New User")}})
+                except Exception as e:
+                    await _broadcast({"enrollment_result": {"success": False, "error": str(e)}})
+            else:
+                await _broadcast({"enrollment_result": {"success": False, "error": "Could not capture enough frames"}})
+        asyncio.create_task(_run_enrollment())
 
-    # Summary triggers
+    # Recognition: broadcast handled in RECOGNIZE_USER block (after recognize-capture)
+
+    # Summary
     if intent == "DAILY_SUMMARY":
-        await _broadcast_nav("summary")
+        await _broadcast({"navigate": "summary"})
 
-    # Eye check triggers
+    # Eye check: navigate + result
     if intent == "EYE_CHECK":
-        await _broadcast_nav("eyes")
+        await _broadcast({"navigate": "eyes"})
+        for a in actions_run:
+            if hasattr(a, 'name') and a.name == "run_eye_strain_check" and hasattr(a, 'result') and a.result:
+                r = a.result
+                if isinstance(r, dict):
+                    await _broadcast({"navigate": "eyes", "result": r, "score": r.get("score"), "captured_image": r.get("captured_image")})
+                break
 
-    # Skin check triggers
+    # Skin check: navigate + result (full payload incl. recommendation, details)
     if intent == "SKIN_CHECK":
-        await _broadcast_nav("skin")
+        await _broadcast({"navigate": "skin"})
+        for a in actions_run:
+            if hasattr(a, 'name') and a.name == "run_acne_check" and hasattr(a, 'result') and a.result:
+                r = a.result
+                if isinstance(r, dict) and "error" not in r:
+                    await _broadcast({
+                        "navigate": "skin",
+                        "result": r,
+                        "score": r.get("score"),
+                        "captured_image": r.get("captured_image"),
+                        "recommendation": r.get("recommendation"),
+                        "details": r.get("details"),
+                    })
+                break
 
-    # Dashboard triggers
+    # Dashboard
     if intent == "DASHBOARD":
-        await _broadcast_nav("dashboard")
+        await _broadcast({"navigate": "dashboard"})
 
 @router.post("/intent", response_model=VoiceIntentResponse)
 async def process_voice_intent(request: VoiceIntentRequest):
@@ -206,12 +273,21 @@ async def process_voice_intent(request: VoiceIntentRequest):
         if any(phrase in user_lower for phrase in phrases):
             logger.info(f"Deterministic match: '{user_lower}' -> {det_intent}")
             
-            # Special handling for RECOGNIZE_USER - use display name if available
+            # Special handling for RECOGNIZE_USER - backend captures and recognizes (no frontend camera)
             if det_intent == "RECOGNIZE_USER":
-                if request.display_name:
-                    det_message = f"You're {request.display_name}! How can I help you today?"
+                try:
+                    async with httpx.AsyncClient(timeout=15.0) as client:
+                        res = await client.post(f"{BACKEND_URL}/api/face/recognize-capture")
+                        rec = res.json() if res.status_code == 200 else {}
+                except Exception as e:
+                    logger.error(f"Recognize capture failed: {e}")
+                    rec = {"match": False}
+                if rec.get("match") and rec.get("name"):
+                    det_message = f"You're {rec['name']}! How can I help you today?"
+                    await _broadcast({"action": "recognize_result", "display_name": rec["name"], "user_id": rec.get("user_id"), "match": True})
                 else:
                     det_message = "I don't recognize you yet. Would you like to enroll your face?"
+                    await _broadcast({"action": "recognize_result", "match": False})
                     det_intent = "ENROLL_USER"
 
             # POSTURE_HISTORY: fetch latest posture for user and build message
@@ -237,8 +313,8 @@ async def process_voice_intent(request: VoiceIntentRequest):
                 result = await _execute_jetson_action("run_posture_check", {"user_id": request.user_id}, request.user_id)
                 actions_run.append(VoiceAction(name="run_posture_check", params={"user_id": request.user_id}, result=result))
             elif det_intent == "FULL_ANALYSIS":
-                result = await _execute_jetson_action("run_acne_check", {"user_id": request.user_id}, request.user_id)
-                actions_run.append(VoiceAction(name="run_acne_check", params={"user_id": request.user_id}, result=result))
+                result = await _execute_jetson_action("run_full_analysis", {"user_id": request.user_id}, request.user_id)
+                actions_run.append(VoiceAction(name="run_full_analysis", params={"user_id": request.user_id}, result=result))
             elif det_intent == "SKIN_CHECK":
                 result = await _execute_jetson_action("run_acne_check", {"user_id": request.user_id}, request.user_id)
                 actions_run.append(VoiceAction(name="run_acne_check", params={"user_id": request.user_id}, result=result))

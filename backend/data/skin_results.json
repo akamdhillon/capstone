@@ -1,0 +1,80 @@
+[
+  {
+    "score": 76.0,
+    "details": {
+      "acne": {
+        "classification": "Other",
+        "severity_score": 0.7,
+        "confidence": 77.0,
+        "score": 93
+      },
+      "redness": {
+        "score": 39
+      },
+      "oiliness": {
+        "score": 49
+      },
+      "skin_tone": {
+        "L": 113.6,
+        "a": 142.9,
+        "b": 151.2,
+        "score": 99
+      },
+      "pores": {
+        "score": 96
+      },
+      "dark_spots": {
+        "score": 99
+      },
+      "wrinkles": {
+        "score": 99
+      },
+      "eye_bags": {
+        "score": 99
+      }
+    },
+    "user_id": "unknown",
+    "recommendation": "Your skin appears clear. Maintain good skincare routine.",
+    "status": "moderate",
+    "timestamp": "2026-03-08T20:57:51.122196"
+  },
+  {
+    "score": 77.0,
+    "details": {
+      "acne": {
+        "classification": "Other",
+        "severity_score": 0.5,
+        "confidence": 74.7,
+        "score": 95
+      },
+      "redness": {
+        "score": 37
+      },
+      "oiliness": {
+        "score": 47
+      },
+      "skin_tone": {
+        "L": 113.7,
+        "a": 142.7,
+        "b": 150.3,
+        "score": 99
+      },
+      "pores": {
+        "score": 97
+      },
+      "dark_spots": {
+        "score": 99
+      },
+      "wrinkles": {
+        "score": 99
+      },
+      "eye_bags": {
+        "score": 99
+      }
+    },
+    "user_id": "unknown",
+    "recommendation": "Your skin appears clear. Maintain good skincare routine.",
+    "status": "moderate",
+    "timestamp": "2026-03-08T20:57:55.657514"
+  }
+]

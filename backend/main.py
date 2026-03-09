@@ -149,6 +149,21 @@ async def navigate(command: NavigateCommand):
 class ActionCommand(BaseModel):
     action: str  # e.g., 'recognize'
 
+
+class BroadcastPayload(BaseModel):
+    navigate: Optional[str] = None
+    action: Optional[str] = None
+    result: Optional[dict] = None
+    display_name: Optional[str] = None
+    user_id: Optional[str] = None
+    captured_image: Optional[str] = None
+    scores: Optional[dict] = None
+    overall_score: Optional[float] = None
+    enrollment_start: Optional[bool] = None
+    enrollment_step: Optional[int] = None
+    enrollment_result: Optional[dict] = None
+
+
 @app.post("/api/action")
 async def broadcast_action(command: ActionCommand):
     """Broadcast a specific action trigger to the frontend via WebSocket."""
@@ -157,11 +172,21 @@ async def broadcast_action(command: ActionCommand):
     return {"status": "ok", "action": command.action}
 
 
+@app.post("/api/broadcast")
+async def broadcast(payload: BroadcastPayload):
+    """Broadcast a message to all WebSocket clients (e.g. navigate + result)."""
+    msg = payload.model_dump(exclude_none=True)
+    if msg:
+        await manager.broadcast(msg)
+    return {"status": "ok"}
+
+
 # --- Results Storage ---
 _DATA_DIR = Path(__file__).resolve().parent / "data"
 POSTURE_RESULTS_FILE = _DATA_DIR / "posture_results.json"
 EYE_RESULTS_FILE = _DATA_DIR / "eye_results.json"
 THERMAL_RESULTS_FILE = _DATA_DIR / "thermal_results.json"
+SKIN_RESULTS_FILE = _DATA_DIR / "skin_results.json"
 
 class PostureResultData(BaseModel):
     score: int
@@ -213,6 +238,42 @@ async def get_posture_results(user_id: Optional[str] = None):
         return []
 
 
+class PostureRunRequest(BaseModel):
+    user_id: Optional[str] = None
+
+@app.post("/api/posture/run")
+async def run_posture(req: PostureRunRequest = None):
+    """Trigger posture analysis using Jetson camera (no image from frontend)."""
+    import httpx
+    user_id = (req.user_id if req else None) or "unknown"
+    url = f"http://{settings.JETSON_IP}:{settings.JETSON_POSTURE_PORT}/posture/run"
+    try:
+        async with httpx.AsyncClient(timeout=35.0) as client:
+            response = await client.post(url, json={"user_id": user_id})
+            response.raise_for_status()
+            data = response.json()
+            # Save result for history
+            if "error" not in data:
+                neck = data.get("neck") or {}
+                torso = data.get("torso") or {}
+                entry = PostureResultData(
+                    score=data.get("score", 0),
+                    status=data.get("status", "unknown"),
+                    neck_angle=neck.get("angle", 0) if isinstance(neck, dict) else 0,
+                    torso_angle=torso.get("angle", 0) if isinstance(torso, dict) else 0,
+                    neck_status=neck.get("status", "unknown") if isinstance(neck, dict) else "unknown",
+                    torso_status=torso.get("status", "unknown") if isinstance(torso, dict) else "unknown",
+                    recommendations=data.get("recommendations", []),
+                    frames_analyzed=data.get("frames_analyzed", 0),
+                    user_id=user_id,
+                )
+                await save_posture_result(entry)
+            return data
+    except Exception as e:
+        logger.error(f"Posture run failed: {e}")
+        return {"service": "posture", "error": str(e), "score": 0}
+
+
 def _load_json_file(path: Path, default: list) -> list:
     if not path.exists():
         return default
@@ -237,6 +298,14 @@ class ThermalResultData(BaseModel):
     score: float
     details: Optional[dict] = None
     user_id: Optional[str] = None
+
+
+class SkinResultData(BaseModel):
+    score: Optional[float] = None
+    details: Optional[dict] = None
+    user_id: Optional[str] = None
+    recommendation: Optional[str] = None
+    status: Optional[str] = None
 
 
 @app.post("/api/eyes/results")
@@ -283,9 +352,62 @@ async def get_thermal_results(user_id: Optional[str] = None):
     return history
 
 
+@app.post("/api/skin/results")
+async def save_skin_result(result: SkinResultData):
+    """Save a skin analysis result."""
+    import datetime
+    history = _load_json_file(SKIN_RESULTS_FILE, [])
+    entry = result.model_dump(exclude_none=True)
+    entry["timestamp"] = datetime.datetime.now().isoformat()
+    history.append(entry)
+    if len(history) > 100:
+        history = history[-100:]
+    _save_json_file(SKIN_RESULTS_FILE, history)
+    return {"status": "ok", "total_results": len(history)}
+
+
+@app.get("/api/skin/results")
+async def get_skin_results(user_id: Optional[str] = None):
+    history = _load_json_file(SKIN_RESULTS_FILE, [])
+    if user_id:
+        history = [e for e in history if e.get("user_id") == user_id]
+    return history
+
+
+class SkinRunRequest(BaseModel):
+    user_id: Optional[str] = None
+
+
+@app.post("/api/skin/run")
+async def run_skin(req: SkinRunRequest = None):
+    """Trigger skin analysis via Jetson orchestrator; save result and return."""
+    import httpx
+    user_id = (req.user_id if req else None) or "unknown"
+    url = f"http://{settings.JETSON_IP}:8001/skin/run"
+    try:
+        async with httpx.AsyncClient(timeout=35.0) as client:
+            payload = {} if not req else {"user_id": user_id}
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            if "error" not in data and data.get("score") is not None:
+                entry = SkinResultData(
+                    score=float(data.get("score", 0)),
+                    details=data.get("details"),
+                    user_id=user_id,
+                    recommendation=data.get("recommendation"),
+                    status=data.get("status"),
+                )
+                await save_skin_result(entry)
+            return data
+    except Exception as e:
+        logger.error(f"Skin run failed: {e}")
+        return {"service": "skin", "error": str(e), "score": 0}
+
+
 @app.get("/api/summary")
 async def get_daily_summary(user_id: Optional[str] = None):
-    """Return a daily wellness summary aggregated from posture, eye, and thermal results."""
+    """Return a daily wellness summary aggregated from posture, eye, thermal, and skin results."""
     history = _load_json_file(POSTURE_RESULTS_FILE, [])
     if user_id:
         history = [e for e in history if e.get("user_id") == user_id]
@@ -298,8 +420,13 @@ async def get_daily_summary(user_id: Optional[str] = None):
     if user_id:
         thermal_history = [e for e in thermal_history if e.get("user_id") == user_id]
 
+    skin_history = _load_json_file(SKIN_RESULTS_FILE, [])
+    if user_id:
+        skin_history = [e for e in skin_history if e.get("user_id") == user_id]
+
     latest_eye = eye_history[-1] if eye_history else None
     latest_thermal = thermal_history[-1] if thermal_history else None
+    latest_skin = skin_history[-1] if skin_history else None
 
     if not history:
         return {
@@ -309,6 +436,7 @@ async def get_daily_summary(user_id: Optional[str] = None):
             "trend": "no_data",
             "latest_eye": latest_eye,
             "latest_thermal": latest_thermal,
+            "latest_skin": latest_skin,
         }
 
     scores = [entry["score"] for entry in history if "score" in entry]
@@ -330,6 +458,7 @@ async def get_daily_summary(user_id: Optional[str] = None):
         "trend": trend,
         "latest_eye": latest_eye,
         "latest_thermal": latest_thermal,
+        "latest_skin": latest_skin,
     }
 
 

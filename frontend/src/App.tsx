@@ -14,7 +14,7 @@ import { useVoiceWebSocket } from './hooks/useVoiceWebSocket';
 import './index.css';
 
 function AppContent() {
-  const { currentView, setView, setTriggerRecognition } = useApp();
+  const { currentView, setView, setTriggerRecognition, setCurrentUser, setGreeting } = useApp();
 
   useVoiceWebSocket(useCallback((data) => {
     if (data.navigate) {
@@ -26,7 +26,19 @@ function AppContent() {
     if (data.action === 'recognize') {
       setTriggerRecognition(true);
     }
-  }, [setView, setTriggerRecognition]));
+    if (data.action === 'recognize_result') {
+      setTriggerRecognition(false);
+      if (data.match && data.display_name) {
+        setGreeting(`Good day, ${data.display_name}.`);
+        setCurrentUser({
+          id: (data.user_id as string) ?? crypto.randomUUID(),
+          name: data.display_name as string,
+          created_at: new Date().toISOString(),
+        });
+        setView('dashboard');
+      }
+    }
+  }, [setView, setTriggerRecognition, setCurrentUser, setGreeting]));
 
   return (
     <>

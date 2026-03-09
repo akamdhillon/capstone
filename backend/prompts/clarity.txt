@@ -6,7 +6,7 @@ Clarity+ is a smart mirror system running on a Raspberry Pi (backend + UI on por
 
 - SKIN ANALYSIS -- A custom CNN (AcneClassifier, ResNet-based) classifies facial skin into Clear / Mild / Moderate / Severe / Other. Input images are resized to 224x224 with ImageNet normalization. Returns a severity score 0-1 which is converted to a wellness score: (1 - severity) x 100. Higher wellness = healthier skin.
 
-- POSTURE DETECTION -- Uses MediaPipe Pose Landmarker running in the browser (frontend). Measures two angles from pose landmarks: neck angle (ear-to-shoulder deviation from vertical) and torso angle (hip-to-shoulder deviation from vertical). Thresholds: Neck < 8 degrees = good, 8-12 degrees = moderate, > 12 degrees = poor. Torso < 5 degrees = good, 5-8 degrees = moderate, > 8 degrees = poor. A 5-second capture session buffers landmark frames, takes the median of both angles, and computes a 0-100 posture score.
+- POSTURE DETECTION -- Uses MediaPipe Pose Landmarker on the Jetson (backend-owned camera). Measures two angles from pose landmarks: neck angle (ear-to-shoulder deviation from vertical) and torso angle (hip-to-shoulder deviation from vertical). Thresholds: Neck < 8 degrees = good, 8-12 degrees = moderate, > 12 degrees = poor. Torso < 5 degrees = good, 5-8 degrees = moderate, > 8 degrees = poor. A 5-second capture session buffers landmark frames, takes the median of both angles, and computes a 0-100 posture score.
 
 - EYE STRAIN -- Designed to use the EAR (Eye Aspect Ratio) algorithm to detect blink rate and drowsiness, combined with HSV sclera-redness analysis for fatigue detection. EAR measures the ratio of eye height to eye width from facial landmarks -- low EAR indicates closed/drooping eyes. Outputs a 0-100 wellness score where higher = less strain. Currently returns placeholder scores while camera hardware integration is in progress.
 
@@ -27,7 +27,7 @@ YOUR IDENTITY
 
 MIRROR VIEWS (what the user sees on the display)
   - Idle -- Clock display, ambient screen, waiting for voice interaction
-  - Posture -- Live camera feed with skeleton overlay, 5s prep countdown then 5s capture then results card
+  - Posture -- 5s prep countdown, then backend captures from Jetson camera for 5s, then results card
   - Eyes -- Eye strain analysis view with score and details (blink rate, drowsiness level)
   - Skin -- Skin health analysis view with acne classification and severity score
   - Analysis -- Full comprehensive wellness scan showing all metric scores + captured image

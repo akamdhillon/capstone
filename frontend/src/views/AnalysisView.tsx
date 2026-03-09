@@ -1,8 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { useVoiceWebSocket } from '../hooks/useVoiceWebSocket';
-import { CapturePhase } from '../components/CapturePhase';
-import { triggerDebugAnalysis, saveEyeResult, saveThermalResult } from '../services/api';
 import { CircularProgress } from '../components/ui/CircularProgress';
 
 const AUTO_RETURN_SECONDS = 30;
@@ -10,49 +8,26 @@ const AUTO_RETURN_SECONDS = 30;
 export function AnalysisView() {
     const {
         setView, scores, overallScore, capturedImage,
-        setScores, currentUser, webcamFrame, setWebcamFrame,
+        setScores, currentUser,
     } = useApp();
 
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [countdown, setCountdown] = useState(AUTO_RETURN_SECONDS);
     const [skinDetails, setSkinDetails] = useState<Record<string, unknown> | null>(null);
-    const needsCapture = webcamFrame === null;
+
+    useVoiceWebSocket(useCallback((data) => {
+        if (data.navigate === 'analysis' && data.result) {
+            setIsLoading(false);
+            const r = data.result as Record<string, unknown>;
+            const s = r.scores as Record<string, number> | undefined;
+            setScores(s ?? null, (r.overall_score as number) ?? null, (r.captured_image as string) ?? null);
+            setSkinDetails((r.details as Record<string, unknown>)?.skin as Record<string, unknown> ?? null);
+        }
+    }, [setScores]));
 
     useEffect(() => {
-        if (!webcamFrame) return;
-        let cancelled = false;
-        const performAnalysis = async () => {
-            setIsLoading(true);
-            try {
-                const result = await triggerDebugAnalysis(webcamFrame);
-                if (!cancelled) {
-                    setScores(result.scores, result.overall_score, result.captured_image);
-                    setSkinDetails((result.details?.skin as Record<string, unknown>) ?? null);
-                    if (result.scores?.eyes != null) {
-                        saveEyeResult(result.scores.eyes, result.details?.eyes as Record<string, unknown> | undefined, currentUser?.id ?? undefined).catch(() => {});
-                    }
-                    if (result.scores?.thermal != null) {
-                        saveThermalResult(result.scores.thermal, result.details?.thermal as Record<string, unknown> | undefined, currentUser?.id ?? undefined).catch(() => {});
-                    }
-                }
-            } catch (err) {
-                console.error('Analysis failed:', err);
-                if (!cancelled) setError('Analysis unavailable');
-            } finally {
-                if (!cancelled) {
-                    setWebcamFrame(null);
-                    setIsLoading(false);
-                }
-            }
-        };
-        performAnalysis();
-        return () => { cancelled = true; };
-    }, [currentUser, setScores, webcamFrame, setWebcamFrame]);
-
-    // Auto-return countdown
-    useEffect(() => {
-        if (isLoading || error) return;
+        if (!isLoading && !error) return;
         const interval = setInterval(() => {
             setCountdown((prev) => {
                 if (prev <= 1) {
@@ -64,7 +39,6 @@ export function AnalysisView() {
             });
         }, 1000);
         return () => clearInterval(interval);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isLoading, error]);
 
     const handleClose = () => {
@@ -87,19 +61,14 @@ export function AnalysisView() {
 
     return (
         <div className="min-h-screen bg-black flex flex-col items-center justify-center p-8 select-none">
-            {needsCapture ? (
-                <CapturePhase
-                    onCapture={setWebcamFrame}
-                    label="Position yourself in frame"
-                    sublabel="Full wellness scan will capture automatically"
-                />
-            ) : isLoading ? (
+            {isLoading ? (
                 <div className="flex flex-col items-center animate-fade-in">
                     <div className="relative w-20 h-20 mb-6">
                         <div className="absolute inset-0 rounded-full border-2 border-white/10" />
                         <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-cyan-400/60 animate-spin" />
                     </div>
-                    <p className="text-white/40 text-sm tracking-wide">Analyzing wellness...</p>
+                    <p className="text-white/90 text-lg font-light tracking-wide">Position yourself in frame</p>
+                    <p className="text-white/40 text-sm mt-2 tracking-wide">Full wellness scan capturing from backend camera...</p>
                 </div>
             ) : error ? (
                 <div className="flex flex-col items-center animate-fade-in text-center">
@@ -109,8 +78,6 @@ export function AnalysisView() {
             ) : (
                 <div className="w-full max-w-3xl animate-fade-in">
                     <div className="flex flex-col lg:flex-row gap-10 items-center justify-center">
-
-                        {/* Left: Score + Image */}
                         <div className="flex flex-col items-center gap-6">
                             {capturedImage && (
                                 <div className="glass-subtle p-1 rounded-2xl overflow-hidden">
@@ -127,13 +94,10 @@ export function AnalysisView() {
                             </div>
                         </div>
 
-                        {/* Right: Metrics */}
                         <div className="flex flex-col w-full max-w-sm stagger-children">
                             {currentUser && (
                                 <div className="mb-6">
-                                    <h2 className="text-xl font-light text-white/80">
-                                        {currentUser.name}
-                                    </h2>
+                                    <h2 className="text-xl font-light text-white/80">{currentUser.name}</h2>
                                     <p className="text-white/25 text-xs mt-1 tracking-wide">Full wellness analysis</p>
                                 </div>
                             )}
@@ -182,7 +146,7 @@ function MetricRow({
             </div>
             <div className="text-right">
                 <span className={`text-2xl font-light ${color}`}>
-                    {score !== null ? Math.round(score) : '\u2014'}
+                    {score !== null ? Math.round(score) : '—'}
                 </span>
                 <p className={`text-xs ${color} opacity-70`}>{statusLabel}</p>
             </div>

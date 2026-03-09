@@ -6,9 +6,15 @@ export interface VoiceMessage {
     action?: string;
     state?: string;
     display_name?: string;
+    user_id?: string;
     caption?: string;
     transcript?: string;
     greeting?: string;
+    result?: Record<string, unknown>;
+    captured_image?: string;
+    scores?: Record<string, number>;
+    overall_score?: number;
+    match?: boolean;
     [key: string]: unknown;
 }
 
