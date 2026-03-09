@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import string
+import asyncio
 from pathlib import Path
 from typing import Optional
 
@@ -19,6 +20,35 @@ _THIS_DIR = Path(__file__).resolve().parent
 
 JETSON_ORCHESTRATOR_URL = f"http://{settings.JETSON_IP}:8001"
 BACKEND_URL = settings.BACKEND_BASE_URL
+
+# Simple global state for voice-driven enrollment naming.
+_enrollment_waiting_for_name: bool = False
+
+
+def _normalize_enrollment_name(text: str) -> Optional[str]:
+    """
+    Extract a display name from user speech.
+    Supports spelled names like \"A K A M\" -> \"Akam\".
+    """
+    raw = text.strip()
+    if not raw:
+        return None
+
+    # Strip common prefixes
+    prefix_re = r"^(my name is|call me|it's|its|i am|i'm)\s+"
+    raw = re.sub(prefix_re, "", raw, flags=re.IGNORECASE).strip()
+    if not raw:
+        return None
+
+    tokens = raw.split()
+    # If user spells the name letter by letter
+    if tokens and all(len(t) == 1 and t.isalpha() for t in tokens):
+        name = "".join(tokens)
+    else:
+        name = raw
+
+    # Title-case the final name
+    return name.strip().title() if name.strip() else None
 
 class VoiceMessage(BaseModel):
     role: str
@@ -137,36 +167,9 @@ async def _handle_broadcasts(intent: str, actions_run: list, request=None):
                     await _broadcast({"navigate": "analysis", "result": r, "scores": r.get("scores"), "overall_score": r.get("overall_score"), "captured_image": r.get("captured_image")})
                 break
 
-    # Enrollment: run capture loop in background, broadcast progress
+    # Enrollment: just navigate; capture is kicked off separately once name is known.
     if intent == "ENROLL_USER":
-        await _broadcast({"navigate": "enrollment", "enrollment_start": True})
-        async def _run_enrollment():
-            import asyncio
-            images = []
-            for step in range(3):
-                try:
-                    async with httpx.AsyncClient(timeout=15.0) as c:
-                        r = await c.post(f"{BACKEND_URL}/api/face/capture-frame")
-                        if r.status_code == 200:
-                            data = r.json()
-                            if data.get("image"):
-                                images.append(data["image"])
-                except Exception:
-                    pass
-                await _broadcast({"enrollment_step": step})
-                if step < 2:
-                    await asyncio.sleep(2)
-            if len(images) >= 2:
-                try:
-                    async with httpx.AsyncClient(timeout=30.0) as c:
-                        r = await c.post(f"{BACKEND_URL}/api/face/enroll", json={"name": "New User", "images": images})
-                        res = r.json() if r.status_code == 200 else {}
-                    await _broadcast({"enrollment_result": {"success": True, "user_id": res.get("user_id"), "name": res.get("name", "New User")}})
-                except Exception as e:
-                    await _broadcast({"enrollment_result": {"success": False, "error": str(e)}})
-            else:
-                await _broadcast({"enrollment_result": {"success": False, "error": "Could not capture enough frames"}})
-        asyncio.create_task(_run_enrollment())
+        await _broadcast({"navigate": "enrollment"})
 
     # Recognition: broadcast handled in RECOGNIZE_USER block (after recognize-capture)
 
@@ -192,31 +195,116 @@ async def _handle_broadcasts(intent: str, actions_run: list, request=None):
     if intent == "SKIN_CHECK":
         await _broadcast({"navigate": "skin"})
         for a in actions_run:
-            if hasattr(a, 'name') and a.name == "run_acne_check" and hasattr(a, 'result') and a.result:
+            if hasattr(a, "name") and a.name == "run_acne_check" and hasattr(a, "result") and a.result:
                 r = a.result
                 if isinstance(r, dict):
+                    # Emit progress event
                     if "error" in r:
-                        await _broadcast({"debug_progress": {"phase": "error", "service": "skin", "message": r.get("error", "Skin failed"), "detail": r}})
+                        await _broadcast(
+                            {
+                                "debug_progress": {
+                                    "phase": "error",
+                                    "service": "skin",
+                                    "message": r.get("error", "Skin failed"),
+                                    "detail": r,
+                                }
+                            }
+                        )
                     else:
-                        await _broadcast({"debug_progress": {"phase": "complete", "service": "skin", "message": "Skin complete", "detail": r}})
+                        await _broadcast(
+                            {
+                                "debug_progress": {
+                                    "phase": "complete",
+                                    "service": "skin",
+                                    "message": "Skin complete",
+                                    "detail": r,
+                                }
+                            }
+                        )
+
+                    # Always broadcast result so SkinCheckView can exit "analyzing"
+                    payload = {
+                        "navigate": "skin",
+                        "result": r,
+                    }
                     if "error" not in r:
-                        await _broadcast({
-                            "navigate": "skin",
-                            "result": r,
-                            "score": r.get("score"),
-                            "captured_image": r.get("captured_image"),
-                            "recommendation": r.get("recommendation"),
-                            "details": r.get("details"),
-                        })
+                        payload.update(
+                            {
+                                "score": r.get("score"),
+                                "captured_image": r.get("captured_image"),
+                                "recommendation": r.get("recommendation"),
+                                "details": r.get("details"),
+                            }
+                        )
+                    await _broadcast(payload)
                 break
 
     # Dashboard
     if intent == "DASHBOARD":
         await _broadcast({"navigate": "dashboard"})
 
+
+async def _run_enrollment_capture(name: str):
+    """Capture enrollment frames and call face enroll with the spoken *name*."""
+    images: list[str] = []
+    # Capture a few frames from the backend capture endpoint
+    for step in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as c:
+                r = await c.post(f"{BACKEND_URL}/api/face/capture-frame")
+                if r.status_code == 200:
+                    data = r.json()
+                    if data.get("image"):
+                        images.append(data["image"])
+        except Exception:
+            pass
+        await _broadcast({"enrollment_step": step})
+        if step < 2:
+            await asyncio.sleep(2)
+
+    if len(images) >= 2:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as c:
+                r = await c.post(f"{BACKEND_URL}/api/face/enroll", json={"name": name, "images": images})
+                res = r.json() if r.status_code == 200 else {}
+            await _broadcast({
+                "enrollment_result": {
+                    "success": True,
+                    "user_id": res.get("user_id"),
+                    "name": res.get("name", name),
+                }
+            })
+        except Exception as e:
+            await _broadcast({"enrollment_result": {"success": False, "error": str(e)}})
+    else:
+        await _broadcast({"enrollment_result": {"success": False, "error": "Could not capture enough frames"}})
+
+
 @router.post("/intent", response_model=VoiceIntentResponse)
 async def process_voice_intent(request: VoiceIntentRequest):
+    global _enrollment_waiting_for_name
     logger.info(f"Voice Request: {request.user_text}")
+    
+    # ── Enrollment name capture flow (second turn after \"enroll me\") ──
+    if _enrollment_waiting_for_name:
+        name = _normalize_enrollment_name(request.user_text)
+        if not name:
+            return VoiceIntentResponse(
+                assistant_message="I didn't catch the name. Please say it again, or spell it letter by letter.",
+                intent="ENROLL_USER",
+                actions_run=[],
+                confidence=0.7,
+            )
+        _enrollment_waiting_for_name = False
+        # Start enrollment capture in background
+        asyncio.create_task(_run_enrollment_capture(name))
+        await _broadcast({"navigate": "enrollment", "enrollment_start": True})
+        return VoiceIntentResponse(
+            assistant_message=f"Got it. I'll save you as {name}. Starting your profile enrollment...",
+            intent="ENROLL_USER",
+            actions_run=[],
+            confidence=1.0,
+        )
     
     # ── PRE-LLM: Deterministic keyword matching for clear-cut intents ──
     # These bypass the LLM entirely for speed and accuracy.
@@ -230,14 +318,14 @@ async def process_voice_intent(request: VoiceIntentRequest):
          "NAVIGATE_HOME", "Returning you to the mirror now."),
         # Enrollment  
         (["enroll my face", "enroll me", "add new user", "add a new user", "register my face", "register me"],
-         "ENROLL_USER", "Starting your profile enrollment..."),
+         "ENROLL_USER", None),
         # Identity (user asking who THEY are) - must come BEFORE self-identity rules
         (["who am i", "identify me", "recognize me", "who is this",
           "what's my name", "what is my name", "say my name", "do you know me", "do you know who i am"],
          "RECOGNIZE_USER", "Looking for you now..."),
         # Self-identity (user asking who the MIRROR is)
         (["what's your name", "what is your name", "who are you", "what are you", "tell me about yourself"],
-         "SMALL_TALK", "I'm Clarity Plus, your personal wellness mirror assistant! I can check your posture, analyze your skin, and track your wellness over time."),
+         "SMALL_TALK", "I'm your personal wellness mirror assistant! I can check your posture, analyze your skin, and track your wellness over time."),
         # Capabilities
         (["what can you do", "what do you do", "help me", "what are your features", "how do you work"],
          "SMALL_TALK", "I can check your posture, analyze your skin for acne, monitor eye strain, and give you a daily wellness summary. Just ask me anytime!"),
@@ -303,7 +391,20 @@ async def process_voice_intent(request: VoiceIntentRequest):
                     det_message = "I don't recognize you yet. Would you like to enroll your face?"
                     await _broadcast({"action": "recognize_result", "match": False})
                     det_intent = "ENROLL_USER"
-
+            
+            # Enrollment: ask for name and set waiting flag
+            if det_intent == "ENROLL_USER":
+                _enrollment_waiting_for_name = True
+                det_message = "Let's get you set up. What name should I save for your profile? You can say it or spell it letter by letter."
+                actions_run: list[VoiceAction] = []
+                await _handle_broadcasts(det_intent, actions_run)
+                return VoiceIntentResponse(
+                    assistant_message=det_message,
+                    intent=det_intent,
+                    actions_run=actions_run,
+                    confidence=1.0,
+                )
+                    
             # POSTURE_HISTORY: fetch latest posture for user and build message
             if det_intent == "POSTURE_HISTORY":
                 try:
@@ -436,7 +537,7 @@ async def process_voice_intent(request: VoiceIntentRequest):
     
     user_msg_content = f"[{', '.join(context)}]\n{request.user_text}" if context else request.user_text
     messages.append({"role": "user", "content": user_msg_content})
-    logger.info(f"Sending to LLM [{'posture context injected' if is_posture_query else 'no posture context'}]")
+    logger.info(f"Sending to LLM")
 
     try:
         response = ollama.chat(
@@ -483,7 +584,7 @@ async def process_voice_intent(request: VoiceIntentRequest):
         
         # Map raw action names -> proper intents
         ACTION_TO_INTENT = {
-            "run_acne_check": "FULL_ANALYSIS",
+            "run_acne_check": "SKIN_CHECK",
             "run_eye_strain_check": "EYE_CHECK",
             "run_thermal_scan": "FULL_ANALYSIS",
             "run_posture_check": "POSTURE_CHECK",
@@ -541,6 +642,17 @@ async def process_voice_intent(request: VoiceIntentRequest):
         
         logger.info(f"Final intent: {intent} | Message: {assistant_msg[:50]}")
         
+        # If we decided on an analysis intent but the model didn't return actions,
+        # synthesize the correct backend calls so the flow still works.
+        if intent == "SKIN_CHECK" and not raw_actions:
+            raw_actions = [{"name": "run_acne_check", "params": {"user_id": request.user_id}}]
+        elif intent == "EYE_CHECK" and not raw_actions:
+            raw_actions = [{"name": "run_eye_strain_check", "params": {"user_id": request.user_id}}]
+        elif intent == "FULL_ANALYSIS" and not raw_actions:
+            raw_actions = [{"name": "run_full_analysis", "params": {"user_id": request.user_id}}]
+        elif intent == "POSTURE_CHECK" and not raw_actions:
+            raw_actions = [{"name": "run_posture_check", "params": {"user_id": request.user_id}}]
+
         actions_run = []
         for raw_action in raw_actions:
             name = raw_action.get("name")
