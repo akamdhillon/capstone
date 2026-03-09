@@ -104,8 +104,12 @@ async def _handle_broadcasts(intent: str, actions_run: list, request=None):
     if posture_actions or intent == "POSTURE_CHECK":
         await _broadcast({"navigate": "posture"})
         for a in posture_actions:
-            if hasattr(a, 'result') and a.result and "error" not in a.result:
+            if hasattr(a, 'result') and a.result:
                 res = a.result
+                if "error" in res:
+                    await _broadcast({"debug_progress": {"phase": "error", "service": "posture", "message": res.get("error", "Posture failed"), "detail": res}})
+                else:
+                    await _broadcast({"debug_progress": {"phase": "complete", "service": "posture", "message": "Posture complete", "detail": res}})
                 await _broadcast({"navigate": "posture", "result": {
                     "score": res.get("score"),
                     "status": res.get("status"),
@@ -129,6 +133,7 @@ async def _handle_broadcasts(intent: str, actions_run: list, request=None):
             if hasattr(a, 'name') and a.name == "run_full_analysis" and hasattr(a, 'result') and a.result:
                 r = a.result
                 if isinstance(r, dict) and r.get("scores") is not None:
+                    await _broadcast({"debug_progress": {"phase": "complete", "service": "full", "message": "Full scan complete", "detail": r}})
                     await _broadcast({"navigate": "analysis", "result": r, "scores": r.get("scores"), "overall_score": r.get("overall_score"), "captured_image": r.get("captured_image")})
                 break
 
@@ -176,6 +181,10 @@ async def _handle_broadcasts(intent: str, actions_run: list, request=None):
             if hasattr(a, 'name') and a.name == "run_eye_strain_check" and hasattr(a, 'result') and a.result:
                 r = a.result
                 if isinstance(r, dict):
+                    if r.get("error"):
+                        await _broadcast({"debug_progress": {"phase": "error", "service": "eyes", "message": r.get("error", "Eyes failed"), "detail": r}})
+                    else:
+                        await _broadcast({"debug_progress": {"phase": "complete", "service": "eyes", "message": "Eyes complete", "detail": r}})
                     await _broadcast({"navigate": "eyes", "result": r, "score": r.get("score"), "captured_image": r.get("captured_image")})
                 break
 
@@ -185,15 +194,20 @@ async def _handle_broadcasts(intent: str, actions_run: list, request=None):
         for a in actions_run:
             if hasattr(a, 'name') and a.name == "run_acne_check" and hasattr(a, 'result') and a.result:
                 r = a.result
-                if isinstance(r, dict) and "error" not in r:
-                    await _broadcast({
-                        "navigate": "skin",
-                        "result": r,
-                        "score": r.get("score"),
-                        "captured_image": r.get("captured_image"),
-                        "recommendation": r.get("recommendation"),
-                        "details": r.get("details"),
-                    })
+                if isinstance(r, dict):
+                    if "error" in r:
+                        await _broadcast({"debug_progress": {"phase": "error", "service": "skin", "message": r.get("error", "Skin failed"), "detail": r}})
+                    else:
+                        await _broadcast({"debug_progress": {"phase": "complete", "service": "skin", "message": "Skin complete", "detail": r}})
+                    if "error" not in r:
+                        await _broadcast({
+                            "navigate": "skin",
+                            "result": r,
+                            "score": r.get("score"),
+                            "captured_image": r.get("captured_image"),
+                            "recommendation": r.get("recommendation"),
+                            "details": r.get("details"),
+                        })
                 break
 
     # Dashboard
@@ -310,15 +324,19 @@ async def process_voice_intent(request: VoiceIntentRequest):
             # Execute any actions tied to deterministic intents
             actions_run = []
             if det_intent == "POSTURE_CHECK":
+                await _broadcast({"debug_progress": {"phase": "capturing", "service": "posture", "message": "Capturing posture frames (5s)...", "elapsed_ms": 0}})
                 result = await _execute_jetson_action("run_posture_check", {"user_id": request.user_id}, request.user_id)
                 actions_run.append(VoiceAction(name="run_posture_check", params={"user_id": request.user_id}, result=result))
             elif det_intent == "FULL_ANALYSIS":
+                await _broadcast({"debug_progress": {"phase": "capturing", "service": "full", "message": "Capturing frame for full scan...", "elapsed_ms": 0}})
                 result = await _execute_jetson_action("run_full_analysis", {"user_id": request.user_id}, request.user_id)
                 actions_run.append(VoiceAction(name="run_full_analysis", params={"user_id": request.user_id}, result=result))
             elif det_intent == "SKIN_CHECK":
+                await _broadcast({"debug_progress": {"phase": "capturing", "service": "skin", "message": "Capturing frame for skin...", "elapsed_ms": 0}})
                 result = await _execute_jetson_action("run_acne_check", {"user_id": request.user_id}, request.user_id)
                 actions_run.append(VoiceAction(name="run_acne_check", params={"user_id": request.user_id}, result=result))
             elif det_intent == "EYE_CHECK":
+                await _broadcast({"debug_progress": {"phase": "capturing", "service": "eyes", "message": "Capturing frame for eyes...", "elapsed_ms": 0}})
                 result = await _execute_jetson_action("run_eye_strain_check", {"user_id": request.user_id}, request.user_id)
                 actions_run.append(VoiceAction(name="run_eye_strain_check", params={"user_id": request.user_id}, result=result))
             elif det_intent == "DAILY_SUMMARY":

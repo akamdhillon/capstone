@@ -10,6 +10,7 @@ import { DailySummaryView } from './views/DailySummaryView';
 import { EyeCheckView } from './views/EyeCheckView';
 import { SkinCheckView } from './views/SkinCheckView';
 import { VoiceIndicator } from './components/VoiceIndicator';
+import { DebugOverlay } from './components/DebugOverlay';
 import { useVoiceWebSocket } from './hooks/useVoiceWebSocket';
 import './index.css';
 
@@ -43,6 +44,7 @@ function AppContent() {
   return (
     <>
       <VoiceIndicator />
+      <DebugOverlay />
 
       {(() => {
         switch (currentView) {

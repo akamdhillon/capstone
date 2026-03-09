@@ -2,8 +2,19 @@ import { useEffect, useState, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { useVoiceWebSocket } from '../hooks/useVoiceWebSocket';
 import { CircularProgress } from '../components/ui/CircularProgress';
+import type { AnalysisScores } from '../services/api';
 
 const AUTO_RETURN_SECONDS = 30;
+
+function coerceScores(input: unknown): AnalysisScores | null {
+    if (!input || typeof input !== 'object') return null;
+    const s = input as Record<string, unknown>;
+    const val = (k: keyof AnalysisScores): number | null => {
+        const v = s[k];
+        return typeof v === 'number' ? v : v === null ? null : null;
+    };
+    return { skin: val('skin'), posture: val('posture'), eyes: val('eyes'), thermal: val('thermal') };
+}
 
 export function AnalysisView() {
     const {
@@ -20,8 +31,12 @@ export function AnalysisView() {
         if (data.navigate === 'analysis' && data.result) {
             setIsLoading(false);
             const r = data.result as Record<string, unknown>;
-            const s = r.scores as Record<string, number> | undefined;
-            setScores(s ?? null, (r.overall_score as number) ?? null, (r.captured_image as string) ?? null);
+            if (typeof r.error === 'string' && r.error) {
+                setError(r.error);
+                return;
+            }
+            const s = coerceScores(r.scores);
+            setScores(s, (r.overall_score as number) ?? null, (r.captured_image as string) ?? null);
             setSkinDetails((r.details as Record<string, unknown>)?.skin as Record<string, unknown> ?? null);
         }
     }, [setScores]));

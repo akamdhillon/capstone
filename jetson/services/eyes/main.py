@@ -4,10 +4,13 @@ Clarity+ Eye Strain Service
 FastAPI microservice: EAR, sclera redness, puffiness, blink rate.
 Mode 1: /analyze (single image)
 Mode 2: /analyze/stream (video stream)
+Mode 3: /analyze/stream/frame + /analyze/stream/end (orchestrator-driven stream from shared camera)
 Runs on port 8005.
 """
 
+import base64
 import sys
+import threading
 import time
 import uuid
 import logging
@@ -24,6 +27,9 @@ logger = logging.getLogger("service.eyes")
 # Load analyzer at startup (mock in pytest)
 _analyzer = None
 _stream_sessions: dict[str, "BlinkTracker"] = {}
+# Session data for stream-by-frame mode: session_id -> { tracker, ear_list, redness_list, puffiness_list }
+_stream_session_data: dict[str, dict] = {}
+_stream_session_lock = threading.Lock()
 
 
 def _load_analyzer():
@@ -72,6 +78,112 @@ class StreamRequest(BaseModel):
     session_id: str | None = None
     max_frames: int = 300
     process_every_nth: int = 1
+
+
+class StreamFrameRequest(BaseModel):
+    """Single frame for stream-by-frame mode (orchestrator sends frames from shared camera)."""
+    session_id: str
+    image_base64: str
+
+
+class StreamEndRequest(BaseModel):
+    """End stream session and return aggregated result."""
+    session_id: str
+
+
+def _ensure_stream_session(session_id: str) -> dict:
+    """Get or create session data for stream-by-frame mode. Caller must hold _stream_session_lock."""
+    if session_id not in _stream_session_data:
+        _stream_session_data[session_id] = {
+            "tracker": BlinkTracker(),
+            "ear_list": [],
+            "redness_list": [],
+            "puffiness_list": [],
+            "start_time": time.time(),
+        }
+    return _stream_session_data[session_id]
+
+
+@app.post("/analyze/stream/frame")
+async def analyze_stream_frame(request: StreamFrameRequest):
+    """
+    Process one frame in a stream session (orchestrator sends frames from shared camera).
+    Call /analyze/stream/end with the same session_id to get the final aggregated result.
+    """
+    try:
+        raw = base64.b64decode(request.image_base64)
+        arr = np.frombuffer(raw, dtype=np.uint8)
+        frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    except Exception as e:
+        logger.warning(f"Stream frame decode failed: {e}")
+        return {"ok": False, "error": "invalid_image"}
+    if frame is None:
+        return {"ok": False, "error": "invalid_image"}
+
+    result = _analyzer.analyze_frame(frame, blink_rate=None)
+    if result is None:
+        return {"ok": True, "ear": None}
+
+    ts = time.time()
+    with _stream_session_lock:
+        data = _ensure_stream_session(request.session_id)
+        data["ear_list"].append(result["ear"])
+        data["redness_list"].append(result["sclera_redness"])
+        data["puffiness_list"].append(result["puffiness"])
+        data["tracker"].update(result["ear"], ts)
+
+    return {"ok": True, "ear": result["ear"]}
+
+
+@app.post("/analyze/stream/end")
+async def analyze_stream_end(request: StreamEndRequest):
+    """
+    End a stream session and return aggregated eye strain result (score, EAR, blink rate, etc.).
+    """
+    with _stream_session_lock:
+        data = _stream_session_data.pop(request.session_id, None)
+    if not data or not data["ear_list"]:
+        return {
+            "service": "eyes",
+            "mode": "stream",
+            "error": "no_face_detected",
+            "frames_analyzed": 0,
+            "score": None,
+            "details": None,
+        }
+
+    ear_list = data["ear_list"]
+    redness_list = data["redness_list"]
+    puffiness_list = data["puffiness_list"]
+    tracker = data["tracker"]
+
+    blink_rate = tracker.blinks_per_minute()
+    blink_status = _blink_rate_status(blink_rate)
+    ear_med = float(np.median(ear_list))
+    redness_mean = float(np.mean(redness_list))
+    puff_mode = max(set(puffiness_list), key=puffiness_list.count)
+    score = compute_eye_score(ear_med, redness_mean, puff_mode, blink_rate)
+    drowsiness = _classify_drowsiness(ear_med, blink_rate)
+
+    details = {
+        "ear": round(ear_med, 4),
+        "eye_openness": _classify_eye_openness(ear_med),
+        "sclera_redness": round(redness_mean, 2),
+        "puffiness": puff_mode,
+        "blink_rate": blink_rate,
+        "blink_rate_status": blink_status,
+        "drowsiness": drowsiness,
+        "frames_analyzed": len(ear_list),
+        "duration_seconds": round(time.time() - data["start_time"], 2),
+    }
+
+    return {
+        "service": "eyes",
+        "mode": "stream",
+        "score": score,
+        "details": details,
+        "frames_analyzed": len(ear_list),
+    }
 
 
 @app.post("/analyze")

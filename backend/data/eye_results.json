@@ -1,0 +1,280 @@
+[
+  {
+    "score": 61.0,
+    "details": {
+      "service": "eyes",
+      "mode": "image",
+      "score": 61,
+      "details": {
+        "ear": 0.2725,
+        "eye_openness": "Partial",
+        "sclera_redness": 1.82,
+        "puffiness": "High",
+        "blink_rate": null,
+        "drowsiness": "None",
+        "note": "Blink rate unavailable in image mode \u2014 use stream endpoint for full analysis"
+      }
+    },
+    "user_id": null,
+    "timestamp": "2026-03-08T22:03:24.029023"
+  },
+  {
+    "score": 61.0,
+    "details": {
+      "service": "eyes",
+      "mode": "image",
+      "score": 61,
+      "details": {
+        "ear": 0.2725,
+        "eye_openness": "Partial",
+        "sclera_redness": 1.82,
+        "puffiness": "High",
+        "blink_rate": null,
+        "drowsiness": "None",
+        "note": "Blink rate unavailable in image mode \u2014 use stream endpoint for full analysis"
+      }
+    },
+    "user_id": null,
+    "timestamp": "2026-03-08T22:03:24.035170"
+  },
+  {
+    "score": 51.0,
+    "details": {
+      "ear": 0.2444,
+      "eye_openness": "Partial",
+      "sclera_redness": 3.57,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "Mild",
+      "frames_analyzed": 35,
+      "duration_seconds": 4.97
+    },
+    "user_id": "unknown",
+    "timestamp": "2026-03-08T22:20:14.570345"
+  },
+  {
+    "score": 51.0,
+    "details": {
+      "ear": 0.2444,
+      "eye_openness": "Partial",
+      "sclera_redness": 3.57,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "Mild",
+      "frames_analyzed": 35,
+      "duration_seconds": 4.97
+    },
+    "user_id": null,
+    "timestamp": "2026-03-08T22:20:14.753734"
+  },
+  {
+    "score": 51.0,
+    "details": {
+      "ear": 0.2444,
+      "eye_openness": "Partial",
+      "sclera_redness": 3.57,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "Mild",
+      "frames_analyzed": 35,
+      "duration_seconds": 4.97
+    },
+    "user_id": null,
+    "timestamp": "2026-03-08T22:20:14.754868"
+  },
+  {
+    "score": 51.0,
+    "details": {
+      "ear": 0.2444,
+      "eye_openness": "Partial",
+      "sclera_redness": 3.57,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "Mild",
+      "frames_analyzed": 35,
+      "duration_seconds": 4.97
+    },
+    "user_id": null,
+    "timestamp": "2026-03-08T22:20:14.763417"
+  },
+  {
+    "score": 53.0,
+    "details": {
+      "ear": 0.2696,
+      "eye_openness": "Partial",
+      "sclera_redness": 3.9,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "None",
+      "frames_analyzed": 35,
+      "duration_seconds": 5.04
+    },
+    "user_id": "unknown",
+    "timestamp": "2026-03-08T22:20:29.345928"
+  },
+  {
+    "score": 53.0,
+    "details": {
+      "ear": 0.2696,
+      "eye_openness": "Partial",
+      "sclera_redness": 3.9,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "None",
+      "frames_analyzed": 35,
+      "duration_seconds": 5.04
+    },
+    "user_id": null,
+    "timestamp": "2026-03-08T22:20:29.524326"
+  },
+  {
+    "score": 53.0,
+    "details": {
+      "ear": 0.2696,
+      "eye_openness": "Partial",
+      "sclera_redness": 3.9,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "None",
+      "frames_analyzed": 35,
+      "duration_seconds": 5.04
+    },
+    "user_id": null,
+    "timestamp": "2026-03-08T22:20:29.525599"
+  },
+  {
+    "score": 53.0,
+    "details": {
+      "ear": 0.2696,
+      "eye_openness": "Partial",
+      "sclera_redness": 3.9,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "None",
+      "frames_analyzed": 35,
+      "duration_seconds": 5.04
+    },
+    "user_id": null,
+    "timestamp": "2026-03-08T22:20:29.531754"
+  },
+  {
+    "score": 55.0,
+    "details": {
+      "ear": 0.3025,
+      "eye_openness": "Open",
+      "sclera_redness": 4.52,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "None",
+      "frames_analyzed": 35,
+      "duration_seconds": 4.98
+    },
+    "user_id": "unknown",
+    "timestamp": "2026-03-08T22:20:53.780338"
+  },
+  {
+    "score": 55.0,
+    "details": {
+      "ear": 0.3025,
+      "eye_openness": "Open",
+      "sclera_redness": 4.52,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "None",
+      "frames_analyzed": 35,
+      "duration_seconds": 4.98
+    },
+    "user_id": null,
+    "timestamp": "2026-03-08T22:20:53.985003"
+  },
+  {
+    "score": 55.0,
+    "details": {
+      "ear": 0.3025,
+      "eye_openness": "Open",
+      "sclera_redness": 4.52,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "None",
+      "frames_analyzed": 35,
+      "duration_seconds": 4.98
+    },
+    "user_id": null,
+    "timestamp": "2026-03-08T22:20:53.986255"
+  },
+  {
+    "score": 55.0,
+    "details": {
+      "ear": 0.3025,
+      "eye_openness": "Open",
+      "sclera_redness": 4.52,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "None",
+      "frames_analyzed": 35,
+      "duration_seconds": 4.98
+    },
+    "user_id": null,
+    "timestamp": "2026-03-08T22:20:53.994272"
+  },
+  {
+    "score": 55.0,
+    "details": {
+      "ear": 0.2344,
+      "eye_openness": "Partial",
+      "sclera_redness": 2.3,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "Mild",
+      "frames_analyzed": 35,
+      "duration_seconds": 5.02
+    },
+    "user_id": "unknown",
+    "timestamp": "2026-03-08T22:30:50.557704"
+  },
+  {
+    "score": 55.0,
+    "details": {
+      "ear": 0.2344,
+      "eye_openness": "Partial",
+      "sclera_redness": 2.3,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "Mild",
+      "frames_analyzed": 35,
+      "duration_seconds": 5.02
+    },
+    "user_id": null,
+    "timestamp": "2026-03-08T22:30:50.684702"
+  },
+  {
+    "score": 55.0,
+    "details": {
+      "ear": 0.2344,
+      "eye_openness": "Partial",
+      "sclera_redness": 2.3,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "Mild",
+      "frames_analyzed": 35,
+      "duration_seconds": 5.02
+    },
+    "user_id": null,
+    "timestamp": "2026-03-08T22:30:50.693461"
+  }
+]

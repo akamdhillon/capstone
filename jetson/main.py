@@ -8,6 +8,7 @@ Starts camera, saves snapshots, and orchestrates analysis via microservices.
 import sys
 import os
 import time
+import uuid
 import logging
 import cv2
 import threading
@@ -267,6 +268,79 @@ async def capture_frame():
     _, jpg = cv2.imencode(".jpg", frame)
     image_b64 = base64.b64encode(jpg).decode("utf-8")
     return {"success": True, "image": image_b64}
+
+
+class EyesRunRequest(BaseModel):
+    user_id: Optional[str] = None
+
+
+EYES_RUN_DURATION_SEC = 5.0
+EYES_FRAME_INTERVAL_SEC = 0.1  # ~50 frames in 5 sec
+
+
+@app.post("/eyes/run")
+def eyes_run(request: EyesRunRequest = None):
+    """
+    Run eye strain analysis using the shared camera: capture frames for 5 seconds,
+    send each frame to the eyes service stream/frame endpoint, then get aggregated
+    result (EAR, blink rate, drowsiness, score) from stream/end.
+    Returns result + captured_image (last frame base64) for debug overlay.
+    """
+    frame = camera.get_frame()
+    if frame is None:
+        return {"service": "eyes", "error": "Camera not available", "score": None, "details": None}
+
+    session_id = str(uuid.uuid4())
+    eyes_url = f"http://localhost:{SERVICES['eyes']}"
+    start = time.time()
+    last_frame_b64 = None
+    frame_count = 0
+
+    while (time.time() - start) < EYES_RUN_DURATION_SEC:
+        frame = camera.get_frame()
+        if frame is None:
+            break
+        _, jpg = cv2.imencode(".jpg", frame)
+        image_b64 = base64.b64encode(jpg).decode("utf-8")
+        last_frame_b64 = image_b64
+        try:
+            resp = requests.post(
+                f"{eyes_url}/analyze/stream/frame",
+                json={"session_id": session_id, "image_base64": image_b64},
+                timeout=2,
+            )
+            if resp.status_code == 200 and resp.json().get("ok"):
+                frame_count += 1
+        except Exception as e:
+            logger.warning(f"Eyes stream frame failed: {e}")
+        time.sleep(EYES_FRAME_INTERVAL_SEC)
+
+    try:
+        resp = requests.post(
+            f"{eyes_url}/analyze/stream/end",
+            json={"session_id": session_id},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.error(f"Eyes stream end failed: {e}")
+        return {"service": "eyes", "error": str(e), "score": None, "details": None}
+
+    if data.get("error"):
+        return {
+            "service": "eyes",
+            "error": data["error"],
+            "score": None,
+            "details": None,
+            "captured_image": last_frame_b64,
+        }
+
+    data["captured_image"] = last_frame_b64
+    if request and request.user_id:
+        data["user_id"] = request.user_id
+    data["frames_analyzed"] = data.get("frames_analyzed", frame_count)
+    return data
 
 
 if __name__ == "__main__":

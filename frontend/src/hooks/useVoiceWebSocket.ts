@@ -85,14 +85,48 @@ export function useVoiceState() {
     const [caption, setCaption] = useState<string | null>(null);
     const [transcript, setTranscript] = useState<string | null>(null);
 
+    // Keep caption/transcript visible briefly after state returns to IDLE.
+    const captionClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const transcriptClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const CAPTION_HOLD_MS = 4500;
+    const TRANSCRIPT_HOLD_MS = 6500;
+
+    useEffect(() => {
+        return () => {
+            if (captionClearTimerRef.current) clearTimeout(captionClearTimerRef.current);
+            if (transcriptClearTimerRef.current) clearTimeout(transcriptClearTimerRef.current);
+        };
+    }, []);
+
     useVoiceWebSocket(useCallback((data: VoiceMessage) => {
         if (data.state) setVoiceState(data.state as string);
         if (data.display_name) setDisplayName(data.display_name as string);
-        if (typeof data.caption === 'string') setCaption(data.caption);
-        if (typeof data.transcript === 'string') setTranscript(data.transcript);
+        if (typeof data.caption === 'string') {
+            if (captionClearTimerRef.current) clearTimeout(captionClearTimerRef.current);
+            setCaption(data.caption);
+        }
+        if (typeof data.transcript === 'string') {
+            if (transcriptClearTimerRef.current) clearTimeout(transcriptClearTimerRef.current);
+            setTranscript(data.transcript);
+        }
+
+        // When voice returns to IDLE, keep the last caption/transcript around briefly.
         if (data.state === 'IDLE') {
-            setCaption(null);
-            setTranscript(null);
+            if (captionClearTimerRef.current) clearTimeout(captionClearTimerRef.current);
+            captionClearTimerRef.current = setTimeout(() => setCaption(null), CAPTION_HOLD_MS);
+
+            if (transcriptClearTimerRef.current) clearTimeout(transcriptClearTimerRef.current);
+            transcriptClearTimerRef.current = setTimeout(() => setTranscript(null), TRANSCRIPT_HOLD_MS);
+        } else if (typeof data.state === 'string') {
+            // Any active state cancels pending clears.
+            if (captionClearTimerRef.current) {
+                clearTimeout(captionClearTimerRef.current);
+                captionClearTimerRef.current = null;
+            }
+            if (transcriptClearTimerRef.current) {
+                clearTimeout(transcriptClearTimerRef.current);
+                transcriptClearTimerRef.current = null;
+            }
         }
     }, []));
 

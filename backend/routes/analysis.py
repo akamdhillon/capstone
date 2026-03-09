@@ -14,6 +14,9 @@ from pydantic import BaseModel
 
 from config import settings
 from models import AnalysisRequest, AnalysisResult
+from debug_events import frame_poller_context, emit_debug_event
+
+JETSON_CAPTURE_URL = f"http://{settings.JETSON_IP}:8001/capture-frame"
 from services.wellness import WellnessService
 from services.jetson_client import JetsonClient
 from services.wellness_scoring import WellnessScoringEngine
@@ -110,10 +113,12 @@ async def debug_analyze(request: DebugAnalyzeRequest = None):
     """
     import time
     start_time = time.time()
+    await emit_debug_event({"type": "progress", "phase": "capturing", "service": "full", "message": "Capturing frame for full scan...", "elapsed_ms": 0})
     
     image = request.image if request else None
     client = JetsonClient()
-    ml_results = await client.run_full_analysis(image=image)
+    async with frame_poller_context(JETSON_CAPTURE_URL):
+        ml_results = await client.run_full_analysis(image=image)
     
     engine = WellnessScoringEngine()
     overall_score, weights_used = engine.calculate(
@@ -152,30 +157,57 @@ async def debug_analyze(request: DebugAnalyzeRequest = None):
 
 class SingleServiceRequest(BaseModel):
     image: Optional[str] = None  # base64-encoded JPEG from frontend webcam
+    user_id: Optional[str] = None
 
 
 @router.post("/debug/eyes")
 async def debug_eye_analysis(request: SingleServiceRequest = None):
-    """Run eye strain analysis only via Jetson eye service."""
+    """Run eye strain analysis via Jetson: 5s camera stream, EAR + blink rate + score. Saves result and shows debug feed."""
     import time
     import httpx
 
     start_time = time.time()
-    image = request.image if request else None
+    user_id = getattr(request, "user_id", None) or "unknown"
+    await emit_debug_event({"type": "progress", "phase": "capturing", "service": "eyes", "message": "Capturing frames for eye analysis (5s)...", "elapsed_ms": 0})
 
-    # Use the full orchestrator which captures an image and calls all services,
-    # then extract only the eye results
-    client = JetsonClient()
-    ml_results = await client.run_full_analysis(image=image)
+    orchestrator_url = f"http://{settings.JETSON_IP}:8001"
+    result = None
+    async with frame_poller_context(JETSON_CAPTURE_URL):
+        async with httpx.AsyncClient(timeout=35.0) as client:
+            response = await client.post(
+                f"{orchestrator_url}/eyes/run",
+                json={"user_id": user_id},
+            )
+            if response.status_code == 200:
+                result = response.json()
+            else:
+                result = {"error": f"HTTP {response.status_code}", "score": None, "details": None}
 
     elapsed_ms = (time.time() - start_time) * 1000
+    success = result and result.get("score") is not None and not result.get("error")
+    score = result.get("score") if result else None
+    details = result.get("details") if result else None
+    captured_image = result.get("captured_image") if result else None
+    errors = [result["error"]] if result and result.get("error") else []
+
+    # Save to eye results history
+    if success and score is not None:
+        try:
+            base_url = settings.BACKEND_BASE_URL or "http://localhost:8000"
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(
+                    f"{base_url}/api/eyes/results",
+                    json={"score": float(score), "details": details, "user_id": user_id},
+                )
+        except Exception as e:
+            logger.warning(f"Failed to save eye result: {e}")
 
     return {
-        "success": ml_results.eye_score is not None,
-        "score": ml_results.eye_score,
-        "details": ml_results.eye_details,
-        "captured_image": ml_results.captured_image,
-        "errors": [e for e in ml_results.errors if "eyes" in e.lower()] if ml_results.errors else [],
+        "success": success,
+        "score": score,
+        "details": details,
+        "captured_image": captured_image,
+        "errors": errors,
         "timing_ms": elapsed_ms,
     }
 

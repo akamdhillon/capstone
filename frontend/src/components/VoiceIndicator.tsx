@@ -10,13 +10,16 @@ export const VoiceIndicator: React.FC = () => {
     const [displayCaption, setDisplayCaption] = useState<string | null>(null);
 
     useEffect(() => {
-        if (state !== 'IDLE') {
+        // Keep overlay visible while we still have content to show (caption/transcript),
+        // even if the backend returns to IDLE.
+        const shouldShow = state !== 'IDLE' || !!transcript || !!displayCaption || !!caption;
+        if (shouldShow) {
             setVisible(true);
-        } else {
-            const timer = setTimeout(() => setVisible(false), 600);
-            return () => clearTimeout(timer);
+            return;
         }
-    }, [state]);
+        const timer = setTimeout(() => setVisible(false), 600);
+        return () => clearTimeout(timer);
+    }, [state, transcript, displayCaption, caption]);
 
     useEffect(() => {
         if (caption) setDisplayCaption(caption);

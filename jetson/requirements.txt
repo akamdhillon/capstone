@@ -11,4 +11,4 @@ timm
 Pillow
 insightface
 onnxruntime
-mediapipe>=0.10.31
+mediapipe==0.10.9

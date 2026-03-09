@@ -17,6 +17,10 @@ export function EyeCheckView() {
         if (data.navigate === 'eyes' && data.result) {
             setIsLoading(false);
             const r = data.result as Record<string, unknown>;
+            if (typeof r.error === 'string' && r.error) {
+                setError(r.error);
+                return;
+            }
             setResult({
                 score: r.score as number | undefined,
                 details: r.details as Record<string, unknown> | undefined,

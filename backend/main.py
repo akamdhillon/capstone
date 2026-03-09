@@ -15,6 +15,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from config import settings
@@ -43,6 +44,11 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 _voice_listener: VoiceListener | None = None
+
+# --- SSE Debug Events ---
+from debug_events import emit_debug_event, get_sse_listeners, frame_poller_context
+
+JETSON_CAPTURE_URL = f"http://{settings.JETSON_IP}:8001/capture-frame"
 
 # --- Models ---
 class VoiceStatus(BaseModel):
@@ -98,6 +104,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
+        "http://localhost:5173",
         f"http://{settings.RPI_IP}:3000"
     ],
     allow_credentials=True,
@@ -162,6 +169,38 @@ class BroadcastPayload(BaseModel):
     enrollment_start: Optional[bool] = None
     enrollment_step: Optional[int] = None
     enrollment_result: Optional[dict] = None
+    debug_progress: Optional[dict] = None
+    debug_frame: Optional[str] = None
+    debug_camera_url: Optional[str] = None
+
+
+@app.get("/api/debug/sse")
+async def debug_sse_stream():
+    """Server-Sent Events stream for debug progress and frames."""
+    _listeners = get_sse_listeners()
+    queue: asyncio.Queue[dict] = asyncio.Queue(maxsize=32)
+    _listeners.add(queue)
+
+    async def event_gen():
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            _listeners.discard(queue)
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.post("/api/action")
@@ -178,6 +217,10 @@ async def broadcast(payload: BroadcastPayload):
     msg = payload.model_dump(exclude_none=True)
     if msg:
         await manager.broadcast(msg)
+        if "debug_progress" in msg:
+            await emit_debug_event({"type": "progress", **msg["debug_progress"]})
+        if "debug_frame" in msg:
+            await emit_debug_event({"type": "frame", "image": msg["debug_frame"]})
     return {"status": "ok"}
 
 
@@ -246,29 +289,31 @@ async def run_posture(req: PostureRunRequest = None):
     """Trigger posture analysis using Jetson camera (no image from frontend)."""
     import httpx
     user_id = (req.user_id if req else None) or "unknown"
+    await emit_debug_event({"type": "progress", "phase": "running", "service": "posture", "message": "Running posture analysis (5s capture)..."})
     url = f"http://{settings.JETSON_IP}:{settings.JETSON_POSTURE_PORT}/posture/run"
     try:
-        async with httpx.AsyncClient(timeout=35.0) as client:
-            response = await client.post(url, json={"user_id": user_id})
-            response.raise_for_status()
-            data = response.json()
-            # Save result for history
-            if "error" not in data:
-                neck = data.get("neck") or {}
-                torso = data.get("torso") or {}
-                entry = PostureResultData(
-                    score=data.get("score", 0),
-                    status=data.get("status", "unknown"),
-                    neck_angle=neck.get("angle", 0) if isinstance(neck, dict) else 0,
-                    torso_angle=torso.get("angle", 0) if isinstance(torso, dict) else 0,
-                    neck_status=neck.get("status", "unknown") if isinstance(neck, dict) else "unknown",
-                    torso_status=torso.get("status", "unknown") if isinstance(torso, dict) else "unknown",
-                    recommendations=data.get("recommendations", []),
-                    frames_analyzed=data.get("frames_analyzed", 0),
-                    user_id=user_id,
-                )
-                await save_posture_result(entry)
-            return data
+        async with frame_poller_context(JETSON_CAPTURE_URL):
+            async with httpx.AsyncClient(timeout=35.0) as client:
+                response = await client.post(url, json={"user_id": user_id})
+                response.raise_for_status()
+                data = response.json()
+        # Save result for history
+        if "error" not in data:
+            neck = data.get("neck") or {}
+            torso = data.get("torso") or {}
+            entry = PostureResultData(
+                score=data.get("score", 0),
+                status=data.get("status", "unknown"),
+                neck_angle=neck.get("angle", 0) if isinstance(neck, dict) else 0,
+                torso_angle=torso.get("angle", 0) if isinstance(torso, dict) else 0,
+                neck_status=neck.get("status", "unknown") if isinstance(neck, dict) else "unknown",
+                torso_status=torso.get("status", "unknown") if isinstance(torso, dict) else "unknown",
+                recommendations=data.get("recommendations", []),
+                frames_analyzed=data.get("frames_analyzed", 0),
+                user_id=user_id,
+            )
+            await save_posture_result(entry)
+        return data
     except Exception as e:
         logger.error(f"Posture run failed: {e}")
         return {"service": "posture", "error": str(e), "score": 0}
@@ -383,23 +428,25 @@ async def run_skin(req: SkinRunRequest = None):
     """Trigger skin analysis via Jetson orchestrator; save result and return."""
     import httpx
     user_id = (req.user_id if req else None) or "unknown"
+    await emit_debug_event({"type": "progress", "phase": "running", "service": "skin", "message": "Running skin analysis..."})
     url = f"http://{settings.JETSON_IP}:8001/skin/run"
     try:
-        async with httpx.AsyncClient(timeout=35.0) as client:
-            payload = {} if not req else {"user_id": user_id}
-            response = await client.post(url, json=payload)
-            response.raise_for_status()
-            data = response.json()
-            if "error" not in data and data.get("score") is not None:
-                entry = SkinResultData(
-                    score=float(data.get("score", 0)),
-                    details=data.get("details"),
-                    user_id=user_id,
-                    recommendation=data.get("recommendation"),
-                    status=data.get("status"),
-                )
-                await save_skin_result(entry)
-            return data
+        async with frame_poller_context(JETSON_CAPTURE_URL):
+            async with httpx.AsyncClient(timeout=35.0) as client:
+                payload = {} if not req else {"user_id": user_id}
+                response = await client.post(url, json=payload)
+                response.raise_for_status()
+                data = response.json()
+        if "error" not in data and data.get("score") is not None:
+            entry = SkinResultData(
+                score=float(data.get("score", 0)),
+                details=data.get("details"),
+                user_id=user_id,
+                recommendation=data.get("recommendation"),
+                status=data.get("status"),
+            )
+            await save_skin_result(entry)
+        return data
     except Exception as e:
         logger.error(f"Skin run failed: {e}")
         return {"service": "skin", "error": str(e), "score": 0}

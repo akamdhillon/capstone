@@ -37,7 +37,7 @@ wait_for_port() {
     local port=$1
     local name=$2
     local tries=0
-    while [ $tries -lt 20 ]; do
+    while [ $tries -lt 30 ]; do
         if lsof -i :"$port" -sTCP:LISTEN >/dev/null 2>&1; then
             echo -e "  ${GREEN}✓${NC} $name ready on port $port"
             return 0
@@ -77,7 +77,19 @@ if [ ! -d "venv" ]; then
 fi
 
 source venv/bin/activate
-pip install -q -r requirements.txt 2>&1 | grep -v "already satisfied"
+
+# Install backend Python deps only when requirements change
+REQ_HASH_FILE=".venv_requirements_hash"
+CURRENT_HASH="$(shasum requirements.txt 2>/dev/null | awk '{print $1}')"
+SAVED_HASH="$(cat "$REQ_HASH_FILE" 2>/dev/null || echo "")"
+
+if [ "$CURRENT_HASH" != "$SAVED_HASH" ] || [ -z "$SAVED_HASH" ]; then
+    echo "  Installing backend Python dependencies..."
+    pip install -r requirements.txt
+    echo "$CURRENT_HASH" > "$REQ_HASH_FILE"
+else
+    echo "  Backend Python dependencies up to date."
+fi
 
 echo "  Starting backend..."
 python3 main.py &
@@ -99,7 +111,19 @@ if [ ! -d "venv" ]; then
 fi
 
 source venv/bin/activate
-pip install -q -r requirements.txt 2>&1 | grep -v "already satisfied"
+
+# Install Jetson Python deps only when requirements change
+REQ_HASH_FILE=".venv_requirements_hash"
+CURRENT_HASH="$(shasum requirements.txt 2>/dev/null | awk '{print $1}')"
+SAVED_HASH="$(cat "$REQ_HASH_FILE" 2>/dev/null || echo "")"
+
+if [ "$CURRENT_HASH" != "$SAVED_HASH" ] || [ -z "$SAVED_HASH" ]; then
+    echo "  Installing Jetson Python dependencies..."
+    pip install -r requirements.txt
+    echo "$CURRENT_HASH" > "$REQ_HASH_FILE"
+else
+    echo "  Jetson Python dependencies up to date."
+fi
 
 echo "  Starting microservices..."
 python3 services/face/main.py &
@@ -141,7 +165,7 @@ cd "$ROOT_DIR/frontend"
 
 if [ ! -d "node_modules" ]; then
     echo "  Installing npm dependencies..."
-    npm install 2>&1 | tail -3
+    npm install
 fi
 
 echo "  Starting dev server..."
