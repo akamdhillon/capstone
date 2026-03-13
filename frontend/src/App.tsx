@@ -1,5 +1,6 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import { API_BASE_URL } from './config';
 import type { ViewType } from './context/AppContext';
 import { IdleView } from './views/IdleView';
 import { DashboardView } from './views/DashboardView';
@@ -16,6 +17,18 @@ import './index.css';
 
 function AppContent() {
   const { currentView, setView, setTriggerRecognition, setCurrentUser, setGreeting } = useApp();
+
+  // Space bar: skip "Hey Clarity" and go straight to listening (testing)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat) return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      fetch(`${API_BASE_URL}/api/voice/trigger`, { method: 'POST' }).catch(() => {});
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   useVoiceWebSocket(useCallback((data) => {
     if (data.navigate) {

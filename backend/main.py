@@ -139,6 +139,15 @@ async def update_voice_status(status: VoiceStatus):
     return {"status": "ok"}
 
 
+@app.post("/api/voice/trigger")
+async def trigger_voice_listen():
+    """Skip wake word and go straight to listening (space bar for testing)."""
+    if _voice_listener:
+        _voice_listener.trigger_listen()
+        return {"status": "ok", "message": "Listening for command"}
+    return {"status": "error", "message": "Voice listener not running"}
+
+
 # --- Navigation Endpoint ---
 
 class NavigateCommand(BaseModel):

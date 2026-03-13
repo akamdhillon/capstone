@@ -123,6 +123,7 @@ class VoiceListener:
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._audio_queue: queue.Queue = queue.Queue()
+        self._trigger_queue: queue.Queue = queue.Queue()  # Space bar / test trigger
 
     def start(self):
         if self._running:
@@ -137,6 +138,13 @@ class VoiceListener:
         if self._thread:
             self._thread.join(timeout=3)
         logger.info("Voice listener stopped")
+
+    def trigger_listen(self):
+        """Skip wake word and go straight to listening (e.g. space bar for testing)."""
+        try:
+            self._trigger_queue.put_nowait(True)
+        except queue.Full:
+            pass
 
     # -- WebSocket broadcast helpers (thread-safe via event loop) --
 
@@ -228,8 +236,22 @@ class VoiceListener:
                 channels=1,
                 callback=self._audio_callback,
             ):
-                logger.info("Microphone listening — say 'Hey Clarity'")
+                logger.info("Microphone listening — say 'Hey Clarity' or press Space (testing)")
                 while self._running:
+                    # Check for space bar / test trigger (skip wake word)
+                    try:
+                        self._trigger_queue.get_nowait()
+                        logger.info("Trigger (space bar) — listening for command")
+                        self._set_state("LISTENING")
+                        command = self._capture_command(recognizer)
+                        if command:
+                            self._process_command(command, raw_text=command)
+                        else:
+                            logger.info("No command heard, returning to idle")
+                            self._set_state("IDLE")
+                        continue
+                    except queue.Empty:
+                        pass
                     self._listen_for_wake(recognizer)
         except Exception as e:
             logger.error(f"Failed to open microphone: {e}")

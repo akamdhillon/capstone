@@ -88,8 +88,8 @@ export function useVoiceState() {
     // Keep caption/transcript visible briefly after state returns to IDLE.
     const captionClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const transcriptClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const CAPTION_HOLD_MS = 4500;
-    const TRANSCRIPT_HOLD_MS = 6500;
+    const CAPTION_HOLD_MS = 10000;   // How long to show LLM response (e.g. "You're Nikunj") after speaking
+    const TRANSCRIPT_HOLD_MS = 8000;
 
     useEffect(() => {
         return () => {

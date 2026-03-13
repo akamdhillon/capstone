@@ -22,7 +22,7 @@ export const VoiceIndicator: React.FC = () => {
     }, [state, transcript, displayCaption, caption]);
 
     useEffect(() => {
-        if (caption) setDisplayCaption(caption);
+        setDisplayCaption(caption ?? null);
     }, [caption]);
 
     if (!visible) return null;
@@ -45,8 +45,8 @@ export const VoiceIndicator: React.FC = () => {
                 </>
             )}
 
-            {/* Processing / Speaking: top-center overlay */}
-            {(state === 'PROCESSING' || state === 'SPEAKING') && (
+            {/* Processing / Speaking / Post-speak hold: top-center overlay */}
+            {(state === 'PROCESSING' || state === 'SPEAKING' || (state === 'IDLE' && displayCaption)) && (
                 <div
                     className="fixed top-6 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-3 transition-all duration-500 opacity-100"
                 >
@@ -69,15 +69,17 @@ export const VoiceIndicator: React.FC = () => {
                         </div>
                     )}
 
-                    {/* Speaking state: caption + transcript (what you said) */}
-                    {state === 'SPEAKING' && (
+                    {/* Speaking state + IDLE hold: caption + transcript (LLM response stays visible) */}
+                    {(state === 'SPEAKING' || (state === 'IDLE' && displayCaption)) && (
                         <div className="flex flex-col items-center gap-3 animate-slide-down">
                             {transcript && (
                                 <div className="glass-subtle px-4 py-2 text-white/50 text-xs italic max-w-md text-center truncate" title={transcript}>
                                     &ldquo;{transcript}&rdquo;
                                 </div>
                             )}
-                            <div className="w-3 h-3 rounded-full bg-emerald-400 animate-status-breathe" />
+                            {state === 'SPEAKING' && (
+                                <div className="w-3 h-3 rounded-full bg-emerald-400 animate-status-breathe" />
+                            )}
                             <div className="glass px-6 py-3 max-w-md text-center">
                                 <p className="text-white/90 text-sm leading-relaxed">
                                     {displayCaption || 'Speaking...'}
