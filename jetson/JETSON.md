@@ -66,7 +66,24 @@ pip install -r requirements-jetson.txt
 - **Different device**: Set `CAMERA_DEVICE=1` (or 2, etc.) in `.env` if your camera is not `/dev/video0`.
 - **CSI camera**: May need a GStreamer pipeline. Set `USE_GSTREAMER=true` in `.env` (pipeline support in `config.py` / `main.py` when implemented).
 
-## 5. Run Services
+## 5. Ollama (Optional — LLM for Voice Assistant)
+
+To run the voice assistant LLM on the Jetson instead of the Raspberry Pi:
+
+```bash
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull the model (e.g. llama3.2:1b)
+ollama pull llama3.2:1b
+
+# Start Ollama (or run as a systemd service)
+ollama serve
+```
+
+Ensure `.env` on the RPi has `OLLAMA_HOST=http://<JETSON_IP>:11434` so the backend connects to the Jetson's Ollama.
+
+## 6. Run Services
 
 ```bash
 ./start_services.sh
@@ -81,7 +98,7 @@ The script detects Jetson and uses `requirements-jetson.txt` automatically. It w
 
 Press `Ctrl+C` to stop all services.
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 | Issue | Fix |
 |-------|-----|

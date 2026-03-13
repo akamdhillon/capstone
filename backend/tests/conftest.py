@@ -49,8 +49,8 @@ def tmp_face_users_file(tmp_path):
 
 @pytest.fixture()
 def mock_ollama():
-    """Patch ollama.chat so no real LLM call is made."""
-    with patch("voice_orchestrator.ollama.chat") as mocked:
+    """Patch the Ollama client chat so no real LLM call is made."""
+    with patch("voice_orchestrator._ollama_client.chat") as mocked:
         yield mocked
 
 

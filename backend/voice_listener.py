@@ -48,10 +48,13 @@ def _ensure_imports():
 # Constants
 # ---------------------------------------------------------------------------
 VOSK_SAMPLE_RATE = 16000  # Vosk model expects 16 kHz
-# USB mics often support only 44100/48000; we record at native rate and resample
+# USB mics often support only 44100/48000; we record at native rate and resample.
+# On Linux/Pi, 48000 is often preferred (HDMI/USB); 44100 can cause ALSA overflow.
 _vo = os.getenv("VOICE_MIC_RATE", "").strip()
+_is_linux = os.uname().sysname == "Linux"
 MIC_RATES_TO_TRY = (
-    [int(_vo)] if _vo.isdigit() else [16000, 44100, 48000]
+    [int(_vo)] if _vo.isdigit()
+    else ([48000, 44100, 16000] if _is_linux else [16000, 44100, 48000])
 )
 
 WAKE_VARIANTS = [
@@ -140,7 +143,7 @@ class VoiceListener:
         self._loop = event_loop
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        self._audio_queue: queue.Queue = queue.Queue()
+        self._audio_queue: queue.Queue = queue.Queue(maxsize=8)  # Bounded to avoid overflow
         self._trigger_queue: queue.Queue = queue.Queue()  # Space bar / test trigger
 
     def start(self):
@@ -192,7 +195,10 @@ class VoiceListener:
         raw = bytes(indata)
         if getattr(self, "_mic_rate", VOSK_SAMPLE_RATE) != VOSK_SAMPLE_RATE:
             raw = _resample_to_16k(raw, self._mic_rate)
-        self._audio_queue.put(raw)
+        try:
+            self._audio_queue.put_nowait(raw)
+        except queue.Full:
+            pass  # Drop block to avoid input overflow
 
     # -- Main listener loop --
 
@@ -253,7 +259,9 @@ class VoiceListener:
         for rate in MIC_RATES_TO_TRY:
             try:
                 self._mic_rate = rate
-                blocksize = int(0.25 * rate)  # ~250 ms
+                # Use 0.75s blocks on Linux to reduce callback freq and input overflow on Pi
+                block_sec = 0.75 if _is_linux else 0.25
+                blocksize = int(block_sec * rate)
                 stream = sd.RawInputStream(
                     samplerate=rate,
                     blocksize=blocksize,

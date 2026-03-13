@@ -65,6 +65,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def _check_ollama():
+    """Verify Ollama is reachable. Log clear warning if not."""
+    try:
+        import httpx
+        url = f"{settings.OLLAMA_HOST.rstrip('/')}/api/tags"
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            r = await client.get(url)
+            if r.status_code == 200:
+                logger.info("Ollama is reachable at %s. LLM voice intents will work.", settings.OLLAMA_HOST)
+                return True
+    except Exception as e:
+        logger.warning(
+            "Ollama is not reachable at %s (voice intents will return fallback). "
+            "Install: curl -fsSL https://ollama.com/install.sh | sh. Error: %s",
+            settings.OLLAMA_HOST,
+            e,
+        )
+    return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -76,6 +96,8 @@ async def lifespan(app: FastAPI):
     
     logger.info(f"Thermal hardware: {'ENABLED' if settings.THERMAL_ENABLED else 'DISABLED'}")
     logger.info(f"Scoring weights: {settings.weights}")
+
+    await _check_ollama()
 
     # Start voice listener (mic -> Vosk -> orchestrator -> TTS)
     loop = asyncio.get_running_loop()

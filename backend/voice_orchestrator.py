@@ -7,11 +7,13 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter
-import ollama
+from ollama import Client
 from pydantic import BaseModel
 import httpx
 
 from config import settings
+
+_ollama_client = Client(host=settings.OLLAMA_HOST)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -540,7 +542,7 @@ async def process_voice_intent(request: VoiceIntentRequest):
     logger.info(f"Sending to LLM")
 
     try:
-        response = ollama.chat(
+        response = _ollama_client.chat(
             model=settings.OLLAMA_MODEL,
             messages=messages,
             options={
