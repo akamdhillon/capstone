@@ -9,11 +9,17 @@ Runs on Jetson Nano (port 8004) or Mac (CPU) for testing.
 """
 
 import os
+import sys
 import time
 import math
 import logging
 import urllib.request
 from pathlib import Path
+
+# Add jetson root to path for config import
+_jet_root = Path(__file__).resolve().parent.parent.parent
+if str(_jet_root) not in sys.path:
+    sys.path.insert(0, str(_jet_root))
 from dataclasses import dataclass, asdict
 from collections import deque
 from typing import Optional
@@ -202,7 +208,9 @@ def run_posture_analysis(duration_sec: int = 5) -> dict:
     if pose_landmarker is None:
         return {"service": "posture", "error": "Model not loaded", "score": 0}
 
-    cap = cv2.VideoCapture(0)
+    from config import settings
+    cam_device = getattr(settings, "CAMERA_DEVICE_PRIMARY", 0)
+    cap = cv2.VideoCapture(cam_device)
     if not cap.isOpened():
         logger.error("Camera not available")
         return {"service": "posture", "error": "Camera not available", "score": 0}

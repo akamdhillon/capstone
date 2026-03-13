@@ -15,13 +15,13 @@ class Settings:
     JETSON_IP = os.getenv("JETSON_IP")
     RPI_IP = os.getenv("RPI_IP")
     
-    # Camera defaults (can be overridden by env if needed, but keeping simple for now)
+    # Camera defaults (override via env on Jetson: CAMERA_DEVICE, USE_GSTREAMER)
     CAMERA_RESOLUTION_WIDTH = 1920
     CAMERA_RESOLUTION_HEIGHT = 1080
     CAMERA_FPS = 30
     MAC_CAMERA_INDEX = int(os.getenv("MAC_CAMERA_INDEX", "0"))
-    CAMERA_DEVICE_PRIMARY = 0
-    USE_GSTREAMER = False
+    CAMERA_DEVICE_PRIMARY = int(os.getenv("CAMERA_DEVICE", "0"))
+    USE_GSTREAMER = os.getenv("USE_GSTREAMER", "false").lower() == "true"
     DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
     DEV_VIDEO_PATH = "video.mp4"
 

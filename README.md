@@ -63,7 +63,7 @@ python3 main.py
 The main Jetson orchestrator runs on Port **8001**.
 It attempts to connect to microservices on ports **8002-8006**.
 
-**To run everything locally:**
+**To run everything locally (Mac):**
 
 ```bash
 cd jetson
@@ -74,6 +74,8 @@ pip install -r requirements.txt
 # Run the startup script (Launches all microservices + orchestrator)
 ./start_services.sh
 ```
+
+**On Jetson Nano:** See [jetson/JETSON.md](jetson/JETSON.md) for PyTorch and setup instructions. Use `./start_services.sh` after installing requirements per the guide.
 
 > **Note**: If on Mac, the camera will default to your webcam.
 

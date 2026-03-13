@@ -1,0 +1,35 @@
+# =============================================================================
+# Clarity+ Jetson Nano Requirements
+# =============================================================================
+# PyTorch and torchvision MUST be installed separately from NVIDIA's Jetson
+# wheels. Standard pip torch/torchvision are x86-only and will fail on ARM.
+#
+# Install PyTorch first (see JETSON.md for your JetPack version):
+#   pip install torch torchvision  # from NVIDIA wheel URL for your JetPack
+#
+# Then: pip install -r requirements-jetson.txt
+# =============================================================================
+
+# Web framework
+fastapi
+uvicorn
+python-multipart
+requests
+
+# Numeric & imaging
+numpy
+opencv-python-headless
+Pillow
+
+# Config
+python-dotenv
+
+# Face: InsightFace + ONNX Runtime (CPU or TensorRT on Jetson)
+insightface
+onnxruntime
+
+# Pose & eyes: MediaPipe
+mediapipe==0.10.9
+
+# Skin: timm (requires torch/torchvision - install those first)
+timm
