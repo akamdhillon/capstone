@@ -34,21 +34,5 @@ class AnalysisHistory(BaseModel):
 # That module includes a richer VoiceAction (with a result field) and uses
 # actions_run instead of actions to reflect executed-action semantics.
 
-# Legacy models kept below for backward compatibility with llm_voice.py
-class VoiceIntentRequest(BaseModel):
-    user_text: str
-    user_id: Optional[str] = None
-    display_name: Optional[str] = None
-    history: List[Dict[str, str]] = []
-
-class VoiceAction(BaseModel):
-    name: str
-    params: Dict[str, Any] = {}
-
-class VoiceIntentResponse(BaseModel):
-    assistant_message: str
-    intent: str
-    actions: List[VoiceAction] = []
-    follow_up_needed: bool = False
-    confidence: float = 1.0
-    key_caveats: List[str] = []
+#
+# Legacy voice models for the removed llm_voice route have been deleted.

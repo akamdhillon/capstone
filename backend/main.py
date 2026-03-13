@@ -19,7 +19,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from config import settings
-from routes import analysis, face, llm_voice
+from routes import analysis, face
 import voice_orchestrator
 from voice_listener import VoiceListener
 
@@ -115,7 +115,6 @@ app.add_middleware(
 # Include routers
 app.include_router(analysis.router, prefix="/api", tags=["Analysis"])
 app.include_router(face.router, prefix="/api", tags=["Face"])
-app.include_router(llm_voice.router, prefix="/api/voice_old", tags=["Voice Old"])
 app.include_router(voice_orchestrator.router, prefix="/voice", tags=["Voice"])
 
 

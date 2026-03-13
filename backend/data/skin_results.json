@@ -466,5 +466,44 @@
     "recommendation": "Your skin appears clear. Maintain good skincare routine.",
     "status": "good",
     "timestamp": "2026-03-09T13:47:30.294705"
+  },
+  {
+    "score": 86.0,
+    "details": {
+      "acne": {
+        "classification": "Clear",
+        "severity_score": 0.9,
+        "confidence": 50.7,
+        "score": 91
+      },
+      "redness": {
+        "score": 57
+      },
+      "oiliness": {
+        "score": 100
+      },
+      "skin_tone": {
+        "L": 20.8,
+        "a": 130.6,
+        "b": 121.1,
+        "score": 99
+      },
+      "pores": {
+        "score": 99
+      },
+      "dark_spots": {
+        "score": 99
+      },
+      "wrinkles": {
+        "score": 99
+      },
+      "eye_bags": {
+        "score": 99
+      }
+    },
+    "user_id": "unknown",
+    "recommendation": "Your skin appears clear. Maintain good skincare routine.",
+    "status": "good",
+    "timestamp": "2026-03-09T15:52:02.299958"
   }
 ]

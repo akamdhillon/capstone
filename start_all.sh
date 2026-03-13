@@ -37,7 +37,7 @@ wait_for_port() {
     local port=$1
     local name=$2
     local tries=0
-    while [ $tries -lt 30 ]; do
+    while [ $tries -lt 35 ]; do
         if lsof -i :"$port" -sTCP:LISTEN >/dev/null 2>&1; then
             echo -e "  ${GREEN}✓${NC} $name ready on port $port"
             return 0

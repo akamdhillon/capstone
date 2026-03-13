@@ -308,5 +308,101 @@
     },
     "user_id": "a82d9fdb-a522-4811-ac18-87546ee2f0ce",
     "timestamp": "2026-03-09T13:25:38.306973"
+  },
+  {
+    "score": 41.0,
+    "details": {
+      "ear": 0.2468,
+      "eye_openness": "Partial",
+      "sclera_redness": 6.7,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "Mild",
+      "frames_analyzed": 31,
+      "duration_seconds": 5.04
+    },
+    "user_id": "unknown",
+    "timestamp": "2026-03-09T15:45:16.283661"
+  },
+  {
+    "score": 41.0,
+    "details": {
+      "ear": 0.2468,
+      "eye_openness": "Partial",
+      "sclera_redness": 6.7,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "Mild",
+      "frames_analyzed": 31,
+      "duration_seconds": 5.04
+    },
+    "user_id": null,
+    "timestamp": "2026-03-09T15:45:16.473461"
+  },
+  {
+    "score": 41.0,
+    "details": {
+      "ear": 0.2468,
+      "eye_openness": "Partial",
+      "sclera_redness": 6.7,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "Mild",
+      "frames_analyzed": 31,
+      "duration_seconds": 5.04
+    },
+    "user_id": null,
+    "timestamp": "2026-03-09T15:45:16.480453"
+  },
+  {
+    "score": 66.0,
+    "details": {
+      "ear": 0.2648,
+      "eye_openness": "Partial",
+      "sclera_redness": 0.0,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "None",
+      "frames_analyzed": 32,
+      "duration_seconds": 4.85
+    },
+    "user_id": "unknown",
+    "timestamp": "2026-03-09T15:51:25.962656"
+  },
+  {
+    "score": 66.0,
+    "details": {
+      "ear": 0.2648,
+      "eye_openness": "Partial",
+      "sclera_redness": 0,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "None",
+      "frames_analyzed": 32,
+      "duration_seconds": 4.85
+    },
+    "user_id": "aedc4859-44e4-4f54-b28a-6a4d31d95b9a",
+    "timestamp": "2026-03-09T15:51:26.186577"
+  },
+  {
+    "score": 66.0,
+    "details": {
+      "ear": 0.2648,
+      "eye_openness": "Partial",
+      "sclera_redness": 0,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "None",
+      "frames_analyzed": 32,
+      "duration_seconds": 4.85
+    },
+    "user_id": "aedc4859-44e4-4f54-b28a-6a4d31d95b9a",
+    "timestamp": "2026-03-09T15:51:26.212761"
   }
 ]
