@@ -17,9 +17,11 @@ Setup guide for running the Clarity+ microservices stack on NVIDIA Jetson Nano.
 
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y python3-pip python3-venv libopenblas-dev libjpeg-dev zlib1g-dev
+sudo apt install -y python3-pip python3-venv python3-dev build-essential libopenblas-dev libjpeg-dev zlib1g-dev
 pip3 install --upgrade pip
 ```
+
+> **Note:** `python3-dev` (or `python3.8-dev`) provides Python.h, required to build insightface from source on aarch64 (no prebuilt wheel).
 
 ## 2. PyTorch (Jetson-Specific)
 

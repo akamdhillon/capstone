@@ -19,6 +19,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -45,8 +47,12 @@ def _ensure_imports():
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-SAMPLE_RATE = 16000
-BLOCK_SIZE = 4000  # ~250 ms at 16 kHz
+VOSK_SAMPLE_RATE = 16000  # Vosk model expects 16 kHz
+# USB mics often support only 44100/48000; we record at native rate and resample
+_vo = os.getenv("VOICE_MIC_RATE", "").strip()
+MIC_RATES_TO_TRY = (
+    [int(_vo)] if _vo.isdigit() else [16000, 44100, 48000]
+)
 
 WAKE_VARIANTS = [
     "hey clarity",
@@ -65,6 +71,18 @@ SILENCE_TIMEOUT = 2.0  # seconds of silence to consider the command done
 # Vosk model directory — will be auto-downloaded on first run
 _THIS_DIR = Path(__file__).resolve().parent
 MODEL_DIR = _THIS_DIR / "vosk-model"
+
+
+def _resample_to_16k(data: bytes, orig_rate: int) -> bytes:
+    """Resample int16 mono audio from orig_rate to 16 kHz for Vosk."""
+    if orig_rate == VOSK_SAMPLE_RATE:
+        return data
+    arr = np.frombuffer(data, dtype=np.int16)
+    n_target = int(len(arr) * VOSK_SAMPLE_RATE / orig_rate)
+    x_old = np.linspace(0, 1, len(arr))
+    x_new = np.linspace(0, 1, n_target, endpoint=False)
+    resampled = np.interp(x_new, x_old, arr.astype(np.float64)).astype(np.int16)
+    return resampled.tobytes()
 
 
 def _find_wake_word(text: str) -> tuple[bool, str]:
@@ -168,10 +186,13 @@ class VoiceListener:
     # -- Audio callback for sounddevice --
 
     def _audio_callback(self, indata, frames, time_info, status):
-        """Called by sounddevice for each audio block. Puts raw bytes in queue."""
+        """Called by sounddevice for each audio block. Resamples to 16k if needed, then queues."""
         if status:
             logger.warning(f"Audio status: {status}")
-        self._audio_queue.put(bytes(indata))
+        raw = bytes(indata)
+        if getattr(self, "_mic_rate", VOSK_SAMPLE_RATE) != VOSK_SAMPLE_RATE:
+            raw = _resample_to_16k(raw, self._mic_rate)
+        self._audio_queue.put(raw)
 
     # -- Main listener loop --
 
@@ -225,18 +246,42 @@ class VoiceListener:
 
         logger.info("Vosk model loaded successfully")
 
-        recognizer = vosk.KaldiRecognizer(model, SAMPLE_RATE)
+        recognizer = vosk.KaldiRecognizer(model, VOSK_SAMPLE_RATE)
 
-        # --- Open microphone via sounddevice ---
+        # --- Open microphone: try rates until one works (USB mics often only support 44100/48000) ---
+        stream = None
+        for rate in MIC_RATES_TO_TRY:
+            try:
+                self._mic_rate = rate
+                blocksize = int(0.25 * rate)  # ~250 ms
+                stream = sd.RawInputStream(
+                    samplerate=rate,
+                    blocksize=blocksize,
+                    dtype="int16",
+                    channels=1,
+                    callback=self._audio_callback,
+                )
+                if rate != VOSK_SAMPLE_RATE:
+                    logger.info(f"Microphone opened at {rate} Hz (resampling to 16 kHz for Vosk)")
+                else:
+                    logger.info("Microphone listening — say 'Hey Clarity' or press Space (testing)")
+                break
+            except Exception as e:
+                err_str = str(e)
+                if "Invalid sample rate" in err_str or "-9997" in err_str:
+                    logger.debug(f"Sample rate {rate} Hz not supported, trying next...")
+                    continue
+                raise
+        if stream is None:
+            logger.error(
+                "Failed to open microphone: none of %s Hz supported. "
+                "Set VOICE_MIC_RATE in .env to your mic's rate (e.g. 44100).",
+                MIC_RATES_TO_TRY,
+            )
+            return
+
         try:
-            with sd.RawInputStream(
-                samplerate=SAMPLE_RATE,
-                blocksize=BLOCK_SIZE,
-                dtype="int16",
-                channels=1,
-                callback=self._audio_callback,
-            ):
-                logger.info("Microphone listening — say 'Hey Clarity' or press Space (testing)")
+            with stream:
                 while self._running:
                     # Check for space bar / test trigger (skip wake word)
                     try:
