@@ -32,4 +32,6 @@ onnxruntime
 mediapipe==0.10.9
 
 # Skin: timm (requires torch/torchvision - install those first)
+# Pin huggingface_hub<0.32 to avoid hf-xet -> puccinialin (fails on Jetson aarch64)
+huggingface_hub<0.32
 timm
