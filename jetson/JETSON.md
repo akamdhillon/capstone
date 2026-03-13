@@ -74,8 +74,8 @@ To run the voice assistant LLM on the Jetson instead of the Raspberry Pi:
 # Install Ollama
 curl -fsSL https://ollama.com/install.sh | sh
 
-# Pull the model (e.g. llama3.2:1b)
-ollama pull llama3.2:1b
+# Pull the model (e.g. llama3.2:3b)
+ollama pull llama3.2:3b
 
 # Start Ollama (or run as a systemd service)
 ollama serve
