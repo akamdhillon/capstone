@@ -99,8 +99,9 @@ def main():
             print("  Recording...", end=" ", flush=True)
             data, _ = stream.read(chunk_frames)
             print("done. Transcribing...", end=" ", flush=True)
-            # Convert int16 -> float32 [-1, 1] for Whisper
-            audio_f32 = data.astype(np.float32) / 32768.0
+            # sounddevice returns a buffer; convert to numpy int16 then float32 for Whisper
+            audio_i16 = np.frombuffer(data, dtype=np.int16)
+            audio_f32 = audio_i16.astype(np.float32) / 32768.0
             result = stt_model.transcribe(audio_f32, fp16=False, language="en")
             text = (result.get("text") or "").strip()
             print("done.")
