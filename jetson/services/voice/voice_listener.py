@@ -1,11 +1,10 @@
 """
 Clarity+ Jetson Voice Listener
 ==============================
-Runs on Jetson: mic + Vosk STT + TTS.
+Runs on Jetson: mic + Whisper STT + TTS.
 Posts commands to Pi backend /voice/intent and status to Pi /api/voice/status.
 """
 
-import json
 import logging
 import os
 import queue
@@ -15,23 +14,33 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 import requests
 
 logger = logging.getLogger("service.voice")
 
+# Load .env from repo root for WHISPER_MODEL
+_jet_root = Path(__file__).resolve().parent.parent.parent
+_repo_root = _jet_root.parent
+try:
+    from dotenv import load_dotenv
+    load_dotenv(_repo_root / ".env")
+except ImportError:
+    pass
+
 # ---------------------------------------------------------------------------
 # Lazy imports
 # ---------------------------------------------------------------------------
-vosk = None
+whisper = None
 sd = None
 pyttsx3 = None
 
 
 def _ensure_imports():
-    global vosk, sd, pyttsx3
-    if vosk is None:
-        import vosk as _vosk
-        vosk = _vosk
+    global whisper, sd, pyttsx3
+    if whisper is None:
+        import whisper as _w
+        whisper = _w
     if sd is None:
         import sounddevice as _sd
         sd = _sd
@@ -43,36 +52,16 @@ def _ensure_imports():
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-VOSK_SAMPLE_RATE = 16000
-_vo = os.getenv("VOICE_MIC_RATE", "").strip()
-_is_linux = os.uname().sysname == "Linux"
-MIC_RATES_TO_TRY = (
-    [int(_vo)] if _vo.isdigit()
-    else ([16000, 44100, 48000] if _is_linux else [16000, 44100, 48000])
-)
+SAMPLE_RATE = 16000
+CHUNK_SEC = 4
+CHUNK_FRAMES = SAMPLE_RATE * CHUNK_SEC
+COMMAND_CHUNK_SEC = 5
+COMMAND_CHUNK_FRAMES = SAMPLE_RATE * COMMAND_CHUNK_SEC
 
 WAKE_VARIANTS = [
     "hey clarity", "hey clary", "hey clari", "hey clara",
     "heyklarit", "a clarity", "hey clair", "clarity",
 ]
-
-COMMAND_TIMEOUT = 8.0
-SILENCE_TIMEOUT = 2.0
-
-_THIS_DIR = Path(__file__).resolve().parent
-MODEL_DIR = _THIS_DIR / "vosk-model"
-
-
-def _resample_to_16k(data: bytes, orig_rate: int) -> bytes:
-    import numpy as np
-    if orig_rate == VOSK_SAMPLE_RATE:
-        return data
-    arr = np.frombuffer(data, dtype=np.int16)
-    n_target = int(len(arr) * VOSK_SAMPLE_RATE / orig_rate)
-    x_old = np.linspace(0, 1, len(arr))
-    x_new = np.linspace(0, 1, n_target, endpoint=False)
-    resampled = np.interp(x_new, x_old, arr.astype(np.float64)).astype(np.int16)
-    return resampled.tobytes()
 
 
 def _find_wake_word(text: str):
@@ -81,7 +70,7 @@ def _find_wake_word(text: str):
         idx = lower.find(variant)
         if idx != -1:
             after = lower[idx + len(variant):]
-            after = re.sub(r'^[,.\s!?]+', '', after).strip()
+            after = re.sub(r"^[,.\s!?]+", "", after).strip()
             return True, after
     return False, ""
 
@@ -112,14 +101,28 @@ def _speak(text: str):
 # Voice Listener
 # ---------------------------------------------------------------------------
 class JetsonVoiceListener:
-    """Voice listener on Jetson. POSTs to Pi backend for intent + status."""
+    """Voice listener on Jetson. Uses Whisper for STT, POSTs to Pi backend."""
 
     def __init__(self, backend_url: str):
         self._backend_url = backend_url.rstrip("/")
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        self._audio_queue: queue.Queue = queue.Queue(maxsize=48)
         self._trigger_queue: queue.Queue = queue.Queue()
+        self._whisper_model = None
+
+    def _load_whisper(self):
+        if self._whisper_model is not None:
+            return self._whisper_model
+        model_name = os.getenv("WHISPER_MODEL", "tiny")
+        logger.info("Loading Whisper model: %s", model_name)
+        self._whisper_model = whisper.load_model(model_name, device="cpu")
+        return self._whisper_model
+
+    def _transcribe(self, audio_i16: np.ndarray) -> str:
+        audio_f32 = audio_i16.astype(np.float32) / 32768.0
+        model = self._load_whisper()
+        result = model.transcribe(audio_f32, fp16=False, language="en")
+        return (result.get("text") or "").strip()
 
     def _post_status(self, state: str, caption: Optional[str] = None, transcript: Optional[str] = None):
         try:
@@ -152,24 +155,6 @@ class JetsonVoiceListener:
             self._thread.join(timeout=3)
         logger.info("Jetson voice listener stopped")
 
-    def _audio_callback(self, indata, frames, time_info, status):
-        if status:
-            logger.debug("Audio status: %s", status)
-        try:
-            self._audio_queue.put_nowait(bytes(indata))
-        except queue.Full:
-            pass
-
-    def _read_audio_block(self, timeout: float = 0.5) -> Optional[bytes]:
-        try:
-            raw = self._audio_queue.get(timeout=timeout)
-        except queue.Empty:
-            return None
-        rate = getattr(self, "_mic_rate", VOSK_SAMPLE_RATE)
-        if rate != VOSK_SAMPLE_RATE:
-            raw = _resample_to_16k(raw, rate)
-        return raw
-
     def _process_command(self, command: str, raw_text: Optional[str] = None):
         transcript = raw_text or command
         self._post_status("PROCESSING", transcript=transcript)
@@ -191,59 +176,15 @@ class JetsonVoiceListener:
             _speak("Sorry, I had trouble with that.")
         self._post_status("IDLE")
 
-    def _listen_for_wake(self, recognizer):
-        data = self._read_audio_block()
-        if data is None or not self._running:
-            return
-        if recognizer.AcceptWaveform(data):
-            result = json.loads(recognizer.Result())
-            text = result.get("text", "")
-            if not text:
-                return
-            found, after = _find_wake_word(text)
-            if not found:
-                return
-            logger.info("Wake word detected: '%s'", after or "(listening for command)")
-            if after:
-                self._process_command(after, raw_text=text)
-            else:
-                self._post_status("LISTENING")
-                command = self._capture_command(recognizer)
-                if command:
-                    self._process_command(command, raw_text=command)
-                else:
-                    self._post_status("IDLE")
-
-    def _capture_command(self, recognizer) -> Optional[str]:
-        start = time.time()
-        last_speech_time = time.time()
-        while self._running and (time.time() - start) < COMMAND_TIMEOUT:
-            data = self._read_audio_block()
-            if data is None:
-                continue
-            if recognizer.AcceptWaveform(data):
-                result = json.loads(recognizer.Result())
-                text = result.get("text", "").strip()
-                if text:
-                    _, cleaned = _find_wake_word(text)
-                    return cleaned if cleaned else text
-            else:
-                partial = json.loads(recognizer.PartialResult())
-                if partial.get("partial", "").strip():
-                    last_speech_time = time.time()
-            if (time.time() - last_speech_time) > SILENCE_TIMEOUT and (time.time() - start) > 2.0:
-                result = json.loads(recognizer.FinalResult())
-                text = result.get("text", "").strip()
-                if text:
-                    _, cleaned = _find_wake_word(text)
-                    return cleaned if cleaned else text
-                return None
-        result = json.loads(recognizer.FinalResult())
-        text = result.get("text", "").strip()
-        if text:
-            _, cleaned = _find_wake_word(text)
-            return cleaned if cleaned else text
-        return None
+    def _record_chunk(self, stream, num_frames: int) -> Optional[np.ndarray]:
+        if not self._running:
+            return None
+        try:
+            data, _ = stream.read(num_frames)
+            return np.frombuffer(data, dtype=np.int16)
+        except Exception as e:
+            logger.debug("Record error: %s", e)
+            return None
 
     def _run(self):
         try:
@@ -252,68 +193,66 @@ class JetsonVoiceListener:
             logger.error("Voice listener missing dependency: %s", e)
             return
 
-        if not MODEL_DIR.exists():
-            logger.info("Downloading Vosk model...")
-            try:
-                import urllib.request
-                import zipfile
-                import tempfile
-                url = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
-                with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-                    urllib.request.urlretrieve(url, tmp.name)
-                with zipfile.ZipFile(tmp.name, "r") as zf:
-                    zf.extractall(_THIS_DIR)
-                os.unlink(tmp.name)
-                extracted = _THIS_DIR / "vosk-model-small-en-us-0.15"
-                if extracted.exists():
-                    extracted.rename(MODEL_DIR)
-            except Exception as e:
-                logger.error("Failed to download Vosk model: %s", e)
-                return
+        self._load_whisper()
 
-        vosk.SetLogLevel(-1)
         try:
-            model = vosk.Model(str(MODEL_DIR))
+            stream = sd.RawInputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16")
         except Exception as e:
-            logger.error("Failed to load Vosk: %s", e)
+            logger.error("Failed to open microphone: %s", e)
             return
 
-        recognizer = vosk.KaldiRecognizer(model, VOSK_SAMPLE_RATE)
-        stream = None
-        for rate in MIC_RATES_TO_TRY:
-            try:
-                self._mic_rate = rate
-                block_sec = 0.2 if _is_linux else 0.25
-                blocksize = int(block_sec * rate)
-                stream = sd.RawInputStream(
-                    samplerate=rate, blocksize=blocksize, dtype="int16", channels=1,
-                    callback=self._audio_callback, latency="high" if _is_linux else "low",
-                )
-                logger.info("Microphone at %s Hz", rate)
-                break
-            except Exception as e:
-                if "Invalid sample rate" in str(e) or "-9997" in str(e):
-                    continue
-                raise
-        if stream is None:
-            logger.error("No supported mic rate in %s", MIC_RATES_TO_TRY)
-            return
+        stream.start()
+        logger.info("Microphone open, listening for 'Hey Clarity'...")
 
         try:
-            with stream:
-                while self._running:
-                    try:
-                        self._trigger_queue.get_nowait()
-                        self._post_status("LISTENING")
-                        command = self._capture_command(recognizer)
-                        if command:
-                            self._process_command(command, raw_text=command)
+            while self._running:
+                # Check for trigger (skip wake word)
+                try:
+                    self._trigger_queue.get_nowait()
+                    self._post_status("LISTENING")
+                    logger.info("Trigger — recording command...")
+                    chunk = self._record_chunk(stream, COMMAND_CHUNK_FRAMES)
+                    if chunk is not None:
+                        text = self._transcribe(chunk)
+                        if text:
+                            self._process_command(text, raw_text=text)
                         else:
                             self._post_status("IDLE")
-                        continue
-                    except queue.Empty:
-                        pass
-                    self._listen_for_wake(recognizer)
+                    continue
+                except queue.Empty:
+                    pass
+
+                # Record chunk and check for wake word
+                chunk = self._record_chunk(stream, CHUNK_FRAMES)
+                if chunk is None:
+                    continue
+
+                text = self._transcribe(chunk)
+                if not text:
+                    continue
+
+                found, after = _find_wake_word(text)
+                if not found:
+                    continue
+
+                logger.info("Wake word detected: '%s'", after or "(recording command)")
+                if after:
+                    self._process_command(after, raw_text=text)
+                else:
+                    self._post_status("LISTENING")
+                    cmd_chunk = self._record_chunk(stream, COMMAND_CHUNK_FRAMES)
+                    if cmd_chunk is not None:
+                        cmd_text = self._transcribe(cmd_chunk)
+                        if cmd_text:
+                            self._process_command(cmd_text, raw_text=cmd_text)
+                        else:
+                            self._post_status("IDLE")
+                    else:
+                        self._post_status("IDLE")
+
         except Exception as e:
-            logger.error("Mic error: %s", e)
-        logger.info("Microphone closed")
+            logger.error("Voice loop error: %s", e)
+        finally:
+            stream.stop()
+            stream.close()
+            logger.info("Microphone closed")

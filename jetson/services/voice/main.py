@@ -1,7 +1,7 @@
 """
 Clarity+ Jetson Voice Service
 =============================
-Runs VoiceListener (mic, Vosk, TTS) on Jetson. POSTs to Pi for /voice/intent and /api/voice/status.
+Runs VoiceListener (mic, Whisper STT, TTS) on Jetson. POSTs to Pi for /voice/intent and /api/voice/status.
 Exposes /trigger for Pi to forward space-bar / test trigger.
 """
 

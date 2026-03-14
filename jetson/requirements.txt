@@ -12,7 +12,7 @@ Pillow
 insightface
 onnxruntime
 mediapipe==0.10.9
-# Voice service (Jetson runs mic + Vosk + TTS)
-vosk>=0.3.42
+# Voice service (Jetson runs mic + Whisper STT + TTS)
+openai-whisper
 sounddevice>=0.4.6
 pyttsx3>=2.90
