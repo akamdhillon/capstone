@@ -2,16 +2,15 @@
 """
 Clarity+ Voice Test Script (Jetson)
 ===================================
-Run on Jetson to verify voice stack: imports, mic (Vosk STT), and speaker (pyttsx3).
-Continuously listens, prints and speaks whatever you say. Press Ctrl+C to exit.
+Run on Jetson to verify voice stack: imports, mic (Whisper STT), and speaker (pyttsx3).
+Records ~5 second chunks, transcribes with Whisper, speaks back. Press Ctrl+C to exit.
 
   python3 test_voice_jetson.py
 
-Dependencies: vosk, sounddevice, pyttsx3, numpy
-  pip install vosk sounddevice pyttsx3 numpy
+Dependencies: openai-whisper, sounddevice, pyttsx3, numpy
+  pip install openai-whisper sounddevice pyttsx3 numpy
 """
 
-import json
 import os
 import sys
 import time
@@ -21,10 +20,10 @@ from pathlib import Path
 def check_imports():
     errors = []
     try:
-        import vosk
-        print("  [OK] vosk")
+        import whisper
+        print("  [OK] whisper")
     except ImportError as e:
-        errors.append(f"vosk: {e}")
+        errors.append(f"whisper: {e}")
     try:
         import sounddevice as sd
         print("  [OK] sounddevice")
@@ -42,50 +41,29 @@ def check_imports():
         errors.append(f"numpy: {e}")
     if errors:
         print("\nMissing dependencies. Install with:")
-        print("  pip install vosk sounddevice pyttsx3 numpy")
+        print("  pip install openai-whisper sounddevice pyttsx3 numpy")
         sys.exit(1)
+
 
 def main():
     print("=" * 50)
     print("  Clarity+ Voice Test (Jetson)")
     print("  Say anything — it will be spoken back.")
-    print("  Press Ctrl+C to quit.")
+    print("  Records ~5 sec chunks. Press Ctrl+C to quit.")
     print("=" * 50)
     print("\n1. Checking imports...")
     check_imports()
 
     import numpy as np
     import sounddevice as sd
-    import vosk
+    import whisper
     import pyttsx3
 
-    # Model (check voice service first, then script dir)
-    script_dir = Path(__file__).resolve().parent
-    voice_model = script_dir.parent / "services" / "voice" / "vosk-model"
-    model_dir = voice_model if voice_model.exists() else script_dir / "vosk-model"
-    if not model_dir.exists():
-        alt = script_dir / "vosk-model-small-en-us-0.15"
-        if alt.exists():
-            model_dir = alt
-        else:
-            print("\n2. Downloading Vosk model (small English)...")
-            import urllib.request
-            import zipfile
-            url = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
-            zip_file = script_dir / "vosk-model-small-en-us-0.15.zip"
-            urllib.request.urlretrieve(url, zip_file)
-            with zipfile.ZipFile(zip_file, "r") as zf:
-                zf.extractall(script_dir)
-            zip_file.unlink()
-            model_dir = script_dir / "vosk-model-small-en-us-0.15"
-    if not model_dir.exists():
-        print(f"  [FAIL] Model not found at {model_dir}")
-        sys.exit(1)
-    print(f"  [OK] Vosk model: {model_dir}")
-
-    vosk.SetLogLevel(-1)
-    model = vosk.Model(str(model_dir))
-    recognizer = vosk.KaldiRecognizer(model, 16000)
+    # Whisper model: "tiny"=fast/light, "base"=better accuracy, "small"=slower
+    model_name = os.getenv("WHISPER_MODEL", "base")
+    print(f"\n2. Loading Whisper model ({model_name})...")
+    stt_model = whisper.load_model(model_name, device="cpu")
+    print("  [OK] Whisper ready")
 
     # TTS
     print("\n3. Initializing TTS (pyttsx3)...")
@@ -95,12 +73,11 @@ def main():
 
     # Mic
     SAMPLE_RATE = 16000
-    BLOCK_MS = 200
-    block_frames = int(SAMPLE_RATE * BLOCK_MS / 1000)
-    print(f"\n4. Opening microphone ({SAMPLE_RATE} Hz)...")
+    CHUNK_SEC = 5
+    chunk_frames = SAMPLE_RATE * CHUNK_SEC
+    print(f"\n4. Opening microphone ({SAMPLE_RATE} Hz, {CHUNK_SEC}s chunks)...")
     try:
-        stream = sd.RawInputStream(samplerate=SAMPLE_RATE, blocksize=block_frames,
-                                  dtype="int16", channels=1)
+        stream = sd.RawInputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16")
     except Exception as e:
         print(f"  [FAIL] {e}")
         sys.exit(1)
@@ -109,29 +86,35 @@ def main():
     def speak(text: str):
         if not text or not text.strip():
             return
-        text = text.strip()[:200]  # limit length
+        text = text.strip()[:300]
         print(f"  >> Speaking: {text}")
         engine.say(text)
         engine.runAndWait()
 
-    print("\n5. Listening... Say something!\n")
+    print("\n5. Listening... Say something, then wait ~5 sec for processing.\n")
     stream.start()
 
     try:
         while True:
-            data, _ = stream.read(block_frames)
-            data_bytes = bytes(data)
-            if recognizer.AcceptWaveform(data_bytes):
-                result = json.loads(recognizer.Result())
-                text = (result.get("text") or "").strip()
-                if text:
-                    print(f"  Heard: {text}")
-                    speak(text)
+            print("  Recording...", end=" ", flush=True)
+            data, _ = stream.read(chunk_frames)
+            print("done. Transcribing...", end=" ", flush=True)
+            # Convert int16 -> float32 [-1, 1] for Whisper
+            audio_f32 = data.astype(np.float32) / 32768.0
+            result = stt_model.transcribe(audio_f32, fp16=False, language="en")
+            text = (result.get("text") or "").strip()
+            print("done.")
+            if text:
+                print(f"  Heard: {text}")
+                speak(text)
+            else:
+                print("  (no speech detected)")
     except KeyboardInterrupt:
         print("\n\nStopped.")
     finally:
         stream.stop()
         stream.close()
+
 
 if __name__ == "__main__":
     main()
