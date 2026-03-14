@@ -35,3 +35,8 @@ mediapipe==0.10.9
 # Pin huggingface_hub<0.32 to avoid hf-xet -> puccinialin (fails on Jetson aarch64)
 huggingface_hub<0.32
 timm
+
+# Voice service (mic, Vosk, TTS)
+vosk>=0.3.42
+sounddevice>=0.4.6
+pyttsx3>=2.90

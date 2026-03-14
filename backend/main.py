@@ -21,7 +21,6 @@ from pydantic import BaseModel
 from config import settings
 from routes import analysis, face
 import voice_orchestrator
-from voice_listener import VoiceListener
 
 # --- WebSocket Manager ---
 class ConnectionManager:
@@ -43,7 +42,6 @@ class ConnectionManager:
                 pass
 
 manager = ConnectionManager()
-_voice_listener: VoiceListener | None = None
 
 # --- SSE Debug Events ---
 from debug_events import emit_debug_event, get_sse_listeners, frame_poller_context
@@ -66,22 +64,25 @@ logger = logging.getLogger(__name__)
 
 
 async def _check_ollama():
-    """Verify Ollama is reachable. Log clear warning if not."""
-    try:
-        import httpx
-        url = f"{settings.OLLAMA_HOST.rstrip('/')}/api/tags"
-        async with httpx.AsyncClient(timeout=2.0) as client:
-            r = await client.get(url)
-            if r.status_code == 200:
-                logger.info("Ollama is reachable at %s. LLM voice intents will work.", settings.OLLAMA_HOST)
-                return True
-    except Exception as e:
-        logger.warning(
-            "Ollama is not reachable at %s (voice intents will return fallback). "
-            "Install: curl -fsSL https://ollama.com/install.sh | sh. Error: %s",
-            settings.OLLAMA_HOST,
-            e,
-        )
+    """Verify Ollama is reachable. Use longer timeout for Pi→Jetson network."""
+    import httpx
+    url = f"{settings.OLLAMA_HOST.rstrip('/')}/api/tags"
+    timeout = getattr(settings, "OLLAMA_CHECK_TIMEOUT", 8.0)
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                r = await client.get(url)
+                if r.status_code == 200:
+                    logger.info("Ollama is reachable at %s. LLM voice intents will work.", settings.OLLAMA_HOST)
+                    return True
+        except Exception as e:
+            if attempt == 0:
+                continue
+            logger.info(
+                "Ollama not reachable at %s — voice intents will use fallback responses. "
+                "To enable LLM: run 'ollama serve' on the Jetson, ensure %s is correct, and network allows port 11434. (%s)",
+                settings.OLLAMA_HOST, "OLLAMA_HOST", str(e)[:80],
+            )
     return False
 
 
@@ -89,26 +90,15 @@ async def _check_ollama():
 async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
-    Starts the voice listener background thread on startup.
+    Voice (mic, Vosk, TTS) runs on Jetson; Pi keeps /voice/intent and /api/voice/status.
     """
-    global _voice_listener
     logger.info("Starting Clarity+ Backend...")
-    
     logger.info(f"Thermal hardware: {'ENABLED' if settings.THERMAL_ENABLED else 'DISABLED'}")
     logger.info(f"Scoring weights: {settings.weights}")
 
     await _check_ollama()
 
-    # Start voice listener (mic -> Vosk -> orchestrator -> TTS)
-    loop = asyncio.get_running_loop()
-    _voice_listener = VoiceListener(ws_manager=manager, event_loop=loop)
-    _voice_listener.start()
-    
     yield
-    
-    # Shutdown
-    if _voice_listener:
-        _voice_listener.stop()
     logger.info("Shutting down Clarity+ Backend...")
 
 
@@ -155,7 +145,7 @@ async def voice_websocket(websocket: WebSocket):
 
 @app.post("/api/voice/status")
 async def update_voice_status(status: VoiceStatus):
-    """Endpoint for Pi Client to report its current state."""
+    """Endpoint for Jetson voice service to report state; broadcasts to frontend via WebSocket."""
     logger.info(f"Voice Status Update: {status.state}")
     await manager.broadcast(status.model_dump())
     return {"status": "ok"}
@@ -163,11 +153,17 @@ async def update_voice_status(status: VoiceStatus):
 
 @app.post("/api/voice/trigger")
 async def trigger_voice_listen():
-    """Skip wake word and go straight to listening (space bar for testing)."""
-    if _voice_listener:
-        _voice_listener.trigger_listen()
-        return {"status": "ok", "message": "Listening for command"}
-    return {"status": "error", "message": "Voice listener not running"}
+    """Forward to Jetson voice service (skip wake word, start listening)."""
+    import httpx
+    url = f"http://{settings.JETSON_IP}:{getattr(settings, 'JETSON_VOICE_PORT', 8007)}/trigger"
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.post(url)
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        logger.warning("Voice trigger forward failed: %s", e)
+        return {"status": "error", "message": f"Jetson voice service unreachable: {e}"}
 
 
 # --- Navigation Endpoint ---

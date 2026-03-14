@@ -67,12 +67,6 @@ def _ensure_model():
 
 
 # ---------------------------------------------------------------------------
-# FastAPI app
-# ---------------------------------------------------------------------------
-app = FastAPI(title="Clarity+ Posture Service")
-
-
-# ---------------------------------------------------------------------------
 # Calibrated Configuration
 # ---------------------------------------------------------------------------
 class PostureConfig:
@@ -118,8 +112,14 @@ class RunPostureRequest(BaseModel):
 pose_landmarker: Optional[vision.PoseLandmarker] = None
 
 
-@app.on_event("startup")
-def load_models():
+# ---------------------------------------------------------------------------
+# FastAPI app with lifespan
+# ---------------------------------------------------------------------------
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(app):
     global pose_landmarker
     logger.info("Loading MediaPipe Pose Landmarker (Tasks API)...")
     t0 = time.time()
@@ -133,6 +133,11 @@ def load_models():
     )
     pose_landmarker = vision.PoseLandmarker.create_from_options(options)
     logger.info(f"Pose landmarker loaded in {time.time() - t0:.1f}s")
+    yield
+    pose_landmarker = None
+
+
+app = FastAPI(title="Clarity+ Posture Service", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------

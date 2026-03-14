@@ -65,6 +65,9 @@ cleanup() {
 
 trap cleanup SIGINT SIGTERM
 
+# Suppress Albumentations update check (reduces log noise)
+export NO_ALBUMENTATIONS_UPDATE=1
+
 # ── Start Microservices ───────────────────────────────────────────────
 echo ""
 echo "Starting Face Service (Port 8002)..."
@@ -82,6 +85,9 @@ python3 services/eyes/main.py > services/eyes/service.log 2>&1 &
 echo "Starting Thermal Service (Port 8006)..."
 python3 services/thermal/main.py > services/thermal/service.log 2>&1 &
 
+echo "Starting Voice Service (Port 8007)..."
+python3 services/voice/main.py > services/voice/service.log 2>&1 &
+
 # Wait for services to spin up
 echo ""
 echo "Waiting for services to initialize..."
@@ -97,7 +103,7 @@ _port_listening() {
         ss -tlnp 2>/dev/null | grep -q ":$1 "
     fi
 }
-for port in 8002 8003 8004 8005 8006; do
+for port in 8002 8003 8004 8005 8006 8007; do
     if _port_listening "$port"; then
         echo "  ✓ Port $port - running"
     else

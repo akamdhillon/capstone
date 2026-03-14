@@ -15,6 +15,7 @@ import time
 import uuid
 import logging
 from pathlib import Path
+from typing import Dict, List, Optional
 
 import cv2
 import numpy as np
@@ -26,9 +27,9 @@ logger = logging.getLogger("service.eyes")
 
 # Load analyzer at startup (mock in pytest)
 _analyzer = None
-_stream_sessions: dict[str, "BlinkTracker"] = {}
+_stream_sessions: Dict[str, "BlinkTracker"] = {}
 # Session data for stream-by-frame mode: session_id -> { tracker, ear_list, redness_list, puffiness_list }
-_stream_session_data: dict[str, dict] = {}
+_stream_session_data: Dict[str, dict] = {}
 _stream_session_lock = threading.Lock()
 
 
@@ -73,9 +74,9 @@ class AnalysisRequest(BaseModel):
 
 
 class StreamRequest(BaseModel):
-    stream_url: str | None = None
+    stream_url: Optional[str] = None
     device_id: int = 0
-    session_id: str | None = None
+    session_id: Optional[str] = None
     max_frames: int = 300
     process_every_nth: int = 1
 
@@ -244,9 +245,9 @@ async def analyze_stream(request: StreamRequest = None):
         }
 
     start_time = time.time()
-    ear_list: list[float] = []
-    redness_list: list[float] = []
-    puffiness_list: list[str] = []
+    ear_list: List[float] = []
+    redness_list: List[float] = []
+    puffiness_list: List[str] = []
     frames_processed = 0
     frame_idx = 0
 

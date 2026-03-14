@@ -54,7 +54,7 @@ _vo = os.getenv("VOICE_MIC_RATE", "").strip()
 _is_linux = os.uname().sysname == "Linux"
 MIC_RATES_TO_TRY = (
     [int(_vo)] if _vo.isdigit()
-    else ([48000, 44100, 16000] if _is_linux else [16000, 44100, 48000])
+    else ([16000, 44100, 48000] if _is_linux else [16000, 44100, 48000])
 )
 
 WAKE_VARIANTS = [
@@ -143,7 +143,7 @@ class VoiceListener:
         self._loop = event_loop
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        self._audio_queue: queue.Queue = queue.Queue(maxsize=8)  # Bounded to avoid overflow
+        self._audio_queue: queue.Queue = queue.Queue(maxsize=48)  # Large buffer for Pi to avoid input overflow
         self._trigger_queue: queue.Queue = queue.Queue()  # Space bar / test trigger
 
     def start(self):
@@ -189,16 +189,13 @@ class VoiceListener:
     # -- Audio callback for sounddevice --
 
     def _audio_callback(self, indata, frames, time_info, status):
-        """Called by sounddevice for each audio block. Resamples to 16k if needed, then queues."""
+        """Callback must return quickly — only queue raw bytes. Resampling done in consumer thread."""
         if status:
-            logger.warning(f"Audio status: {status}")
-        raw = bytes(indata)
-        if getattr(self, "_mic_rate", VOSK_SAMPLE_RATE) != VOSK_SAMPLE_RATE:
-            raw = _resample_to_16k(raw, self._mic_rate)
+            logger.debug(f"Audio status: {status}")
         try:
-            self._audio_queue.put_nowait(raw)
+            self._audio_queue.put_nowait(bytes(indata))
         except queue.Full:
-            pass  # Drop block to avoid input overflow
+            pass  # Drop block to avoid blocking callback (causes input overflow)
 
     # -- Main listener loop --
 
@@ -259,8 +256,8 @@ class VoiceListener:
         for rate in MIC_RATES_TO_TRY:
             try:
                 self._mic_rate = rate
-                # Use 0.75s blocks on Linux to reduce callback freq and input overflow on Pi
-                block_sec = 0.75 if _is_linux else 0.25
+                # Smaller blocks on Pi = faster callback return, less overflow. Larger latency buffer.
+                block_sec = 0.2 if _is_linux else 0.25
                 blocksize = int(block_sec * rate)
                 stream = sd.RawInputStream(
                     samplerate=rate,
@@ -268,6 +265,7 @@ class VoiceListener:
                     dtype="int16",
                     channels=1,
                     callback=self._audio_callback,
+                    latency="high" if _is_linux else "low",
                 )
                 if rate != VOSK_SAMPLE_RATE:
                     logger.info(f"Microphone opened at {rate} Hz (resampling to 16 kHz for Vosk)")
@@ -313,11 +311,15 @@ class VoiceListener:
         logger.info("Microphone closed")
 
     def _read_audio_block(self, timeout: float = 0.5) -> Optional[bytes]:
-        """Read one audio block from the queue (non-blocking with timeout)."""
+        """Read one audio block from the queue, resampling to 16 kHz if needed."""
         try:
-            return self._audio_queue.get(timeout=timeout)
+            raw = self._audio_queue.get(timeout=timeout)
         except queue.Empty:
             return None
+        rate = getattr(self, "_mic_rate", VOSK_SAMPLE_RATE)
+        if rate != VOSK_SAMPLE_RATE:
+            raw = _resample_to_16k(raw, rate)
+        return raw
 
     def _listen_for_wake(self, recognizer):
         """Block until wake word is detected, then capture + process command."""

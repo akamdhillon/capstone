@@ -4,6 +4,7 @@ import logging
 import os
 import cv2
 from pathlib import Path
+from typing import Optional
 
 app = FastAPI()
 logger = logging.getLogger("service.skin")
@@ -63,7 +64,7 @@ def _status_from_score(score: int) -> str:
     return "poor"
 
 
-def _run_expanded_pipeline(image_path: str) -> dict | None:
+def _run_expanded_pipeline(image_path: str) -> Optional[dict]:
     """Run preprocess -> regions -> analyses; return merged details or None on failure."""
     try:
         from preprocess import detect_face

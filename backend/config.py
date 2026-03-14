@@ -38,6 +38,7 @@ class Settings:
     # LLM — OLLAMA_HOST: localhost for RPi/Mac, or http://JETSON_IP:11434 when Ollama runs on Jetson
     OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL")
+    OLLAMA_CHECK_TIMEOUT = float(os.getenv("OLLAMA_CHECK_TIMEOUT", "8.0"))
 
     # Jetson Service Ports
     JETSON_FACE_PORT = 8002
@@ -45,7 +46,8 @@ class Settings:
     JETSON_POSTURE_PORT = 8004
     JETSON_EYE_PORT = 8005
     JETSON_THERMAL_PORT = 8006
-    
+    JETSON_VOICE_PORT = 8007
+
     weights = {
         "skin": 0.40,
         "posture": 0.35,
