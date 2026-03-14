@@ -16,6 +16,14 @@ import sys
 import time
 from pathlib import Path
 
+# Load .env from repo root so WHISPER_MODEL etc. are picked up
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+    load_dotenv(env_path)
+except ImportError:
+    pass
+
 # Check imports first
 def check_imports():
     errors = []
