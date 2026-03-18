@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # =============================================================================
-# Clarity+ — Start Pi Services (Backend + Frontend)
+# Clarity+ — Start Mac Services (Backend + Frontend)
 # =============================================================================
-# Launches backend (8000) and frontend (3000) on Raspberry Pi.
+# Launches backend (8000) and frontend (3000) on Mac.
 # Jetson runs start_services.sh separately for ML + voice.
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -18,7 +18,7 @@ PIDS=()
 
 cleanup() {
     echo ""
-    echo -e "${BOLD}Stopping Pi services...${NC}"
+    echo -e "${BOLD}Stopping Mac services...${NC}"
     for pid in "${PIDS[@]}"; do
         kill "$pid" 2>/dev/null
     done
@@ -52,7 +52,7 @@ wait_for_port() {
 
 echo ""
 echo -e "${BOLD}=========================================="
-echo "        Clarity+ Pi — Backend + Frontend"
+echo "        Clarity+ Mac — Backend + Frontend"
 echo -e "==========================================${NC}"
 echo ""
 

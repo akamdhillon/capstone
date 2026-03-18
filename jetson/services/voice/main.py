@@ -1,8 +1,9 @@
 """
 Clarity+ Jetson Voice Service
 =============================
-Runs VoiceListener (mic, Whisper STT, TTS) on Jetson. POSTs to Pi for /voice/intent and /api/voice/status.
-Exposes /trigger for Pi to forward space-bar / test trigger.
+Runs VoiceListener (mic, Whisper STT, TTS) on Jetson.
+POSTs to Mac backend for /voice/intent and /api/voice/status.
+Exposes /trigger for backend to forward space-bar / test trigger.
 """
 
 import logging
@@ -30,9 +31,9 @@ _listener = None
 @asynccontextmanager
 async def lifespan(app):
     global _listener
-    backend_url = f"http://{settings.RPI_IP}:8000" if settings.RPI_IP else None
+    backend_url = f"http://{settings.BACKEND_IP}:8000" if settings.BACKEND_IP else None
     if not backend_url:
-        logger.warning("RPI_IP not set — voice service will not start")
+        logger.warning("BACKEND_IP not set — voice service will not start")
         yield
         return
     from voice_listener import JetsonVoiceListener
@@ -49,7 +50,7 @@ app = FastAPI(title="Clarity+ Voice Service (Jetson)", lifespan=lifespan)
 
 @app.post("/trigger")
 def trigger_listen():
-    """Skip wake word and start listening (e.g. space bar trigger from Pi)."""
+    """Skip wake word and start listening (e.g. space bar trigger from Mac backend)."""
     if _listener:
         _listener.trigger_listen()
         return {"status": "ok", "message": "Listening"}

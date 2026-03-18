@@ -93,7 +93,7 @@ async def debug_info():
         "platform": {"system": platform.system(), "python_version": sys.version},
         "configuration": {
             "jetson_ip": settings.JETSON_IP,
-            "rpi_ip": settings.RPI_IP,
+            "backend_ip": settings.BACKEND_IP,
             "weights": settings.weights
         },
         "connectivity": connectivity,

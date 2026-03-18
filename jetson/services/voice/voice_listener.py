@@ -2,7 +2,7 @@
 Clarity+ Jetson Voice Listener
 ==============================
 Runs on Jetson: mic + Whisper STT + TTS.
-Posts commands to Pi backend /voice/intent and status to Pi /api/voice/status.
+Posts commands to Mac backend /voice/intent and status to /api/voice/status.
 """
 
 import logging
@@ -83,6 +83,7 @@ _tts_lock = threading.Lock()
 
 
 def _speak(text: str):
+    global _tts_engine
     if not text:
         return
     try:

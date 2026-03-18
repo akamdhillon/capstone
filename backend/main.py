@@ -3,7 +3,7 @@
 # =============================================================================
 """
 Main FastAPI application for the Clarity+ Smart Mirror API Gateway.
-Runs on Raspberry Pi 4, orchestrating ML inference requests to Jetson.
+Runs on Mac, orchestrating ML inference requests to Jetson.
 """
 
 import asyncio
@@ -90,7 +90,7 @@ async def _check_ollama():
 async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
-    Voice (mic, Vosk, TTS) runs on Jetson; Pi keeps /voice/intent and /api/voice/status.
+    Voice (mic, Whisper, TTS) runs on Jetson; Mac keeps /voice/intent and /api/voice/status.
     """
     logger.info("Starting Clarity+ Backend...")
     logger.info(f"Thermal hardware: {'ENABLED' if settings.THERMAL_ENABLED else 'DISABLED'}")
@@ -117,7 +117,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:5173",
-        f"http://{settings.RPI_IP}:3000"
+        f"http://{settings.BACKEND_IP}:3000"
     ],
     allow_credentials=True,
     allow_methods=["*"],

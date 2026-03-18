@@ -105,8 +105,8 @@ pnpm dev
 ├────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │   ┌─────────────────┐                    ┌─────────────────┐   │
-│   │   Raspberry Pi  │◄──── Ethernet ────►│   Jetson Nano   │   │
-│   │   192.168.10.1  │      Bridge        │   192.168.10.2  │   │
+│   │   Mac (host)    │◄──── Network ─────►│   Jetson Nano   │   │
+│   │   192.168.50.1  │                    │   192.168.50.2  │   │
 │   ├─────────────────┤                    ├─────────────────┤   │
 │   │ • API Gateway   │                    │ • Face Recog.   │   │
 │   │   (Port 8000)   │                    │   (Port 8002)   │   │
@@ -118,6 +118,8 @@ pnpm dev
 │                                          │   (Port 8005)   │   │
 │                                          │ • Thermal       │   │
 │                                          │   (Port 8006)   │   │
+│                                          │ • Voice (8007)  │   │
+│                                          │ • Stereo Cams   │   │
 │                                          └─────────────────┘   │
 27: └────────────────────────────────────────────────────────────────┘
 ```
@@ -144,7 +146,7 @@ pnpm dev
 ## High-Level Interaction / System Design
 
 ### 1. Voice Pipeline (Hands-Free Control)
-Always-on wake word engine on Raspberry Pi listening for "Hey Clarity" (e.g., Porcupine, Vosk, or similar).
+Always-on wake word engine on Jetson listening for "Hey Clarity" via Whisper STT.
 
 When wake word fires:
 - Unmutes mic.
@@ -216,22 +218,18 @@ pip install -r requirements.txt
 python main.py
 ```
 
-**Raspberry Pi / Voice Client:**
+**Jetson Nano (Voice + ML):**
 ```bash
-pip install -r requirements.txt
-export ELEVENLABS_API_KEY="your-eleven-labs-key"
-export PICOVOICE_ACCESS_KEY="your-picovoice-key"
-
-# Run the wake word loop
-python pi_voice_client.py 
+cd jetson
+./start_services.sh
 ```
 
 ### 2. Integration Instructions
 
 1. `backend/voice_orchestrator.py` listens correctly on `/voice/intent` via FastAPI router.
 2. `backend/prompts/clarity.txt` holds the Llama system instruction set.
-3. `pi_voice_client.py` captures STT (whisper) and converts the LLM text to TTS (Elevenlabs).
-4. Jetson handles all HTTP request inputs from the backend!
+3. Jetson voice service captures STT (Whisper) and plays TTS (pyttsx3).
+4. Jetson handles all ML inference requests from the backend!
 
 ### 3. Test Flow (cURL)
 
