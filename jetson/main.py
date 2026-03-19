@@ -2,8 +2,7 @@
 Clarity+ Orchestrator
 =====================
 Command Center.
-Starts stereo cameras, saves snapshots, and orchestrates analysis via microservices.
-Provides stereo calibration + user-position endpoints.
+Starts a single camera, saves snapshots, and orchestrates analysis via microservices.
 """
 
 import sys
@@ -18,32 +17,28 @@ from fastapi import FastAPI
 import requests
 import uvicorn
 
-from typing import Optional, Tuple
+from typing import Optional
 import base64
 import numpy as np
 from pydantic import BaseModel
 
 from config import settings, IS_MAC
-from stereo import StereoCalibrator, StereoDepthEstimator, estimate_user_position
 
 logger_cam = logging.getLogger("camera")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# StereoCameraManager
+# CameraManager
 # ═══════════════════════════════════════════════════════════════════════════
-class StereoCameraManager:
-    """Manages a stereo camera pair (Jetson) or a single webcam (Mac)."""
+class CameraManager:
+    """Manages a single camera (Jetson: camera 0 only, Mac: MAC_CAMERA_INDEX)."""
 
     def __init__(self):
-        self._cap_left: Optional[cv2.VideoCapture] = None
-        self._cap_right: Optional[cv2.VideoCapture] = None
-        self._frame_left: Optional[np.ndarray] = None
-        self._frame_right: Optional[np.ndarray] = None
+        self._cap: Optional[cv2.VideoCapture] = None
+        self._frame: Optional[np.ndarray] = None
         self._lock = threading.Lock()
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        self._stereo = not IS_MAC
 
         self.width = settings.CAMERA_RESOLUTION_WIDTH
         self.height = settings.CAMERA_RESOLUTION_HEIGHT
@@ -53,109 +48,72 @@ class StereoCameraManager:
         if self._running:
             return True
 
-        if IS_MAC:
-            src = settings.MAC_CAMERA_INDEX
-            logger_cam.info("Mac mode — opening single camera %d", src)
-            self._cap_left = cv2.VideoCapture(src)
-            self._configure_cap(self._cap_left)
-            if not self._cap_left.isOpened():
-                logger_cam.error("Failed to open Mac camera. Entering mock mode.")
-                return self._start_mock()
-        else:
-            src_l = settings.CAMERA_DEVICE_LEFT
-            src_r = settings.CAMERA_DEVICE_RIGHT
-            logger_cam.info("Stereo mode — opening cameras L=%d R=%d", src_l, src_r)
-            self._cap_left = cv2.VideoCapture(src_l)
-            self._cap_right = cv2.VideoCapture(src_r)
-            self._configure_cap(self._cap_left)
-            self._configure_cap(self._cap_right)
-            if not self._cap_left.isOpened():
-                logger_cam.error("Left camera %d failed. Entering mock mode.", src_l)
-                return self._start_mock()
-            if not self._cap_right.isOpened():
-                logger_cam.warning("Right camera %d failed — stereo disabled, using left only.", src_r)
-                self._stereo = False
+        source = settings.MAC_CAMERA_INDEX if IS_MAC else settings.CAMERA_DEVICE_PRIMARY
+        logger_cam.info("Opening camera source: %s", source)
+        self._cap = cv2.VideoCapture(source)
+        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+        self._cap.set(cv2.CAP_PROP_FPS, self.fps)
+
+        if not self._cap.isOpened():
+            logger_cam.error("Failed to open camera. Entering LOCKDOWN/MOCK mode.")
+            self._running = True
+            self._thread = threading.Thread(target=self._mock_capture_loop, daemon=True)
+            self._thread.start()
+            return True
 
         self._running = True
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
         return True
 
-    def _configure_cap(self, cap: cv2.VideoCapture):
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-        cap.set(cv2.CAP_PROP_FPS, self.fps)
-
-    def _start_mock(self) -> bool:
-        self._running = True
-        self._stereo = False
-        self._thread = threading.Thread(target=self._mock_capture_loop, daemon=True)
-        self._thread.start()
-        return True
-
-    def _mock_capture_loop(self):
+    def _mock_capture_loop(self) -> None:
+        """Generates dummy frames when camera is unavailable."""
         logger_cam.warning("Starting MOCK camera loop (Green screen).")
         while self._running:
             frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-            frame[:] = (0, 255, 0)
+            frame[:] = (0, 255, 0)  # Green
             ts = time.strftime("%Y-%m-%d %H:%M:%S")
-            cv2.putText(frame, f"MOCK CAMERA - {ts}", (50, 50),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+            cv2.putText(
+                frame,
+                f"MOCK CAMERA - {ts}",
+                (50, 50),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 0, 0),
+                2,
+            )
             with self._lock:
-                self._frame_left = frame
-                self._frame_right = None
+                self._frame = frame
             time.sleep(1.0 / self.fps)
 
-    def _capture_loop(self):
+    def _capture_loop(self) -> None:
         while self._running:
-            left_ok, right_ok = False, False
-            if self._cap_left:
-                ret, frame = self._cap_left.read()
+            if self._cap:
+                ret, frame = self._cap.read()
                 if ret:
                     with self._lock:
-                        self._frame_left = frame
-                    left_ok = True
-            if self._stereo and self._cap_right:
-                ret, frame = self._cap_right.read()
-                if ret:
-                    with self._lock:
-                        self._frame_right = frame
-                    right_ok = True
-            if not left_ok:
-                time.sleep(0.05)
+                        self._frame = frame
+                else:
+                    logger_cam.warning("Failed to read frame")
+                    time.sleep(0.1)
             time.sleep(1.0 / self.fps)
 
-    def stop(self):
+    def stop(self) -> None:
         self._running = False
         if self._thread:
             self._thread.join(timeout=3)
-        for cap in (self._cap_left, self._cap_right):
-            if cap:
-                cap.release()
+        if self._cap:
+            self._cap.release()
 
     def get_frame(self) -> Optional[np.ndarray]:
-        """Return the left frame (backward-compat for all single-camera services)."""
         with self._lock:
-            if self._frame_left is not None:
-                return self._frame_left.copy()
+            if self._frame is not None:
+                return self._frame.copy()
         return None
 
-    def get_stereo_frames(self) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
-        with self._lock:
-            left = self._frame_left.copy() if self._frame_left is not None else None
-            right = self._frame_right.copy() if self._frame_right is not None else None
-        return left, right
 
-    @property
-    def has_stereo(self) -> bool:
-        return self._stereo and self._cap_right is not None and self._cap_right.isOpened()
-
-
-camera = StereoCameraManager()
-
-# Stereo calibration / depth singleton
-_calibrator = StereoCalibrator()
-_depth_estimator: Optional[StereoDepthEstimator] = None
+camera = CameraManager()
 
 
 # Configuration
@@ -177,20 +135,11 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app):
-    global _depth_estimator
     logger.info("Starting Camera...")
     if camera.start():
-        logger.info("Camera started (stereo=%s).", camera.has_stereo)
+        logger.info("Camera started.")
     else:
         logger.error("Failed to start camera.")
-
-    # Try to load existing stereo calibration
-    calib_path = settings.STEREO_CALIB_PATH
-    if _calibrator.load(calib_path):
-        _depth_estimator = StereoDepthEstimator(_calibrator)
-        logger.info("Stereo calibration loaded — depth estimation available.")
-    else:
-        logger.info("No stereo calibration found at %s — run /stereo/calibrate first.", calib_path)
 
     yield
     logger.info("Stopping Camera...")
@@ -257,26 +206,12 @@ async def analyze_endpoint(payload: AnalyzePayload = None):
     except Exception as e:
         logger.error(f"Failed to encode image: {e}")
 
-    # 4. Optionally include stereo user position
-    position = None
-    if _depth_estimator and _depth_estimator.is_ready and camera.has_stereo:
-        try:
-            left, right = camera.get_stereo_frames()
-            if left is not None and right is not None:
-                depth_map = _depth_estimator.compute_depth(left, right)
-                fx = _calibrator.camera_matrix_left[0, 0] * 0.5
-                fy = _calibrator.camera_matrix_left[1, 1] * 0.5
-                position = estimate_user_position(depth_map, fx=fx, fy=fy)
-        except Exception as e:
-            logger.warning("Stereo position failed during analyze: %s", e)
-
     return {
         "success": True,
         "timestamp": timestamp,
         "image_path": filepath,
         "image": image_b64,
         "results": results,
-        "stereo_position": position,
     }
 
 
@@ -404,94 +339,6 @@ def eyes_run(request: EyesRunRequest = None):
         data["user_id"] = request.user_id
     data["frames_analyzed"] = data.get("frames_analyzed", frame_count)
     return data
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Stereo Calibration & Position Endpoints
-# ═══════════════════════════════════════════════════════════════════════════
-
-class CalibrateSettings(BaseModel):
-    board_cols: int = 9
-    board_rows: int = 6
-    square_size_mm: float = 25.0
-
-
-@app.post("/stereo/calibrate/capture")
-async def stereo_calibrate_capture(cfg: CalibrateSettings = None):
-    """Capture one checkerboard pair and detect corners."""
-    if not camera.has_stereo:
-        return {"error": "Stereo cameras not available"}
-
-    left, right = camera.get_stereo_frames()
-    if left is None or right is None:
-        return {"error": "Could not read stereo frames"}
-
-    board = (cfg.board_cols, cfg.board_rows) if cfg else _calibrator.board_size
-    if cfg and (board != _calibrator.board_size or cfg.square_size_mm != _calibrator.square_size_mm):
-        _calibrator.__init__(board_size=board, square_size_mm=cfg.square_size_mm if cfg else 25.0)
-
-    result = _calibrator.capture_checkerboard(left, right)
-
-    resp = {"found": result["found"], "pair_count": _calibrator.pair_count}
-    if result["found"] and "annotated_left" in result:
-        _, jpg_l = cv2.imencode(".jpg", result["annotated_left"])
-        _, jpg_r = cv2.imencode(".jpg", result["annotated_right"])
-        resp["annotated_left"] = base64.b64encode(jpg_l).decode("utf-8")
-        resp["annotated_right"] = base64.b64encode(jpg_r).decode("utf-8")
-    return resp
-
-
-@app.post("/stereo/calibrate/run")
-async def stereo_calibrate_run():
-    """Run stereo calibration with all captured pairs and save to disk."""
-    global _depth_estimator
-    result = _calibrator.calibrate()
-    if result.get("success"):
-        calib_path = settings.STEREO_CALIB_PATH
-        _calibrator.save(calib_path)
-        _depth_estimator = StereoDepthEstimator(_calibrator)
-    return result
-
-
-@app.get("/stereo/calibrate/status")
-async def stereo_calibrate_status():
-    """Return calibration state."""
-    return {
-        "calibrated": _calibrator.calibrated,
-        "pairs_captured": _calibrator.pair_count,
-        "baseline_m": _calibrator.baseline_m if _calibrator.calibrated else None,
-        "stereo_cameras": camera.has_stereo,
-    }
-
-
-@app.post("/stereo/calibrate/reset")
-async def stereo_calibrate_reset():
-    """Discard collected pairs and start over."""
-    _calibrator.reset()
-    return {"status": "ok", "pairs_captured": 0}
-
-
-@app.get("/stereo/position")
-async def stereo_position():
-    """Compute current user position from stereo depth."""
-    if not camera.has_stereo:
-        return {"error": "Stereo cameras not available"}
-    if _depth_estimator is None or not _depth_estimator.is_ready:
-        return {"error": "Stereo not calibrated — run /stereo/calibrate first"}
-
-    left, right = camera.get_stereo_frames()
-    if left is None or right is None:
-        return {"error": "Could not read stereo frames"}
-
-    try:
-        depth_map = _depth_estimator.compute_depth(left, right)
-        fx = _calibrator.camera_matrix_left[0, 0] * 0.5
-        fy = _calibrator.camera_matrix_left[1, 1] * 0.5
-        pos = estimate_user_position(depth_map, fx=fx, fy=fy)
-        return {"success": True, "position": pos}
-    except Exception as e:
-        logger.error("Stereo position failed: %s", e)
-        return {"error": str(e)}
 
 
 if __name__ == "__main__":
