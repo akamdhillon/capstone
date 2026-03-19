@@ -254,9 +254,9 @@ class VoiceListener:
                 callback=self._audio_callback,
             )
 
+        stream = None
         try:
             tried_rates: list[int] = [TARGET_SAMPLE_RATE, 48000, 44100]
-            stream = None
             for r in tried_rates:
                 try:
                     stream = _open_stream(r)
@@ -291,16 +291,15 @@ class VoiceListener:
                 except queue.Empty:
                     pass
                 self._listen_for_wake(recognizer)
-
-        finally:
-            try:
-                if "stream" in locals() and stream is not None:
-                    stream.__exit__(None, None, None)
-            except Exception:
-                pass
         except Exception as e:
             logger.error(f"Failed to open microphone: {e}")
             return
+        finally:
+            try:
+                if stream is not None:
+                    stream.__exit__(None, None, None)
+            except Exception:
+                pass
 
         logger.info("Microphone closed")
 
