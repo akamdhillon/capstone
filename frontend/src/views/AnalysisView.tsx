@@ -13,7 +13,7 @@ function coerceScores(input: unknown): AnalysisScores | null {
         const v = s[k];
         return typeof v === 'number' ? v : v === null ? null : null;
     };
-    return { skin: val('skin'), posture: val('posture'), eyes: val('eyes'), thermal: val('thermal') };
+    return { skin: val('skin'), posture: val('posture'), eyes: val('eyes') };
 }
 
 export function AnalysisView() {
@@ -121,7 +121,6 @@ export function AnalysisView() {
                                 <MetricRow label="Skin Health" score={scores?.skin ?? null} detail={getAcneLabel()} />
                                 <MetricRow label="Posture" score={scores?.posture ?? null} />
                                 <MetricRow label="Eye Strain" score={scores?.eyes ?? null} />
-                                <MetricRow label="Thermal" score={scores?.thermal ?? null} disabled={scores?.thermal === null} />
                             </div>
 
                             <p className="mt-8 text-white/10 text-xs tracking-wide">

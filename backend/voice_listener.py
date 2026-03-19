@@ -45,8 +45,12 @@ def _ensure_imports():
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-SAMPLE_RATE = 16000
+TARGET_SAMPLE_RATE = 16000
 BLOCK_SIZE = 4000  # ~250 ms at 16 kHz
+
+# Bounded queue to avoid unbounded memory growth if the recognizer can't keep up.
+# When full, we drop the oldest audio so we always process the latest audio.
+MAX_AUDIO_QUEUE_SIZE = 24  # ~6s at 250ms blocks
 
 WAKE_VARIANTS = [
     "hey clarity",
@@ -122,8 +126,10 @@ class VoiceListener:
         self._loop = event_loop
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        self._audio_queue: queue.Queue = queue.Queue()
+        self._audio_queue: queue.Queue = queue.Queue(maxsize=MAX_AUDIO_QUEUE_SIZE)
         self._trigger_queue: queue.Queue = queue.Queue()  # Space bar / test trigger
+        self._stream_sample_rate: int = TARGET_SAMPLE_RATE
+        self._resampler = None  # lazily created if needed
 
     def start(self):
         if self._running:
@@ -171,7 +177,17 @@ class VoiceListener:
         """Called by sounddevice for each audio block. Puts raw bytes in queue."""
         if status:
             logger.warning(f"Audio status: {status}")
-        self._audio_queue.put(bytes(indata))
+        try:
+            self._audio_queue.put_nowait(bytes(indata))
+        except queue.Full:
+            try:
+                _ = self._audio_queue.get_nowait()  # drop oldest
+            except queue.Empty:
+                pass
+            try:
+                self._audio_queue.put_nowait(bytes(indata))
+            except queue.Full:
+                pass
 
     # -- Main listener loop --
 
@@ -225,44 +241,109 @@ class VoiceListener:
 
         logger.info("Vosk model loaded successfully")
 
-        recognizer = vosk.KaldiRecognizer(model, SAMPLE_RATE)
+        def _build_recognizer(sample_rate: int):
+            return vosk.KaldiRecognizer(model, sample_rate)
 
-        # --- Open microphone via sounddevice ---
-        try:
-            with sd.RawInputStream(
-                samplerate=SAMPLE_RATE,
+        # --- Open microphone via sounddevice (with sample-rate fallback) ---
+        def _open_stream(sample_rate: int):
+            return sd.RawInputStream(
+                samplerate=sample_rate,
                 blocksize=BLOCK_SIZE,
                 dtype="int16",
                 channels=1,
                 callback=self._audio_callback,
-            ):
-                logger.info("Microphone listening — say 'Hey Clarity' or press Space (testing)")
-                while self._running:
-                    # Check for space bar / test trigger (skip wake word)
-                    try:
-                        self._trigger_queue.get_nowait()
-                        logger.info("Trigger (space bar) — listening for command")
-                        self._set_state("LISTENING")
-                        command = self._capture_command(recognizer)
-                        if command:
-                            self._process_command(command, raw_text=command)
-                        else:
-                            logger.info("No command heard, returning to idle")
-                            self._set_state("IDLE")
-                        continue
-                    except queue.Empty:
-                        pass
-                    self._listen_for_wake(recognizer)
+            )
+
+        try:
+            tried_rates: list[int] = [TARGET_SAMPLE_RATE, 48000, 44100]
+            stream = None
+            for r in tried_rates:
+                try:
+                    stream = _open_stream(r)
+                    stream.__enter__()
+                    self._stream_sample_rate = r
+                    break
+                except Exception as e:
+                    logger.warning(f"Failed to open microphone at {r} Hz: {e}")
+                    stream = None
+
+            if stream is None:
+                raise RuntimeError("Failed to open microphone at any supported sample rate")
+
+            recognizer = _build_recognizer(TARGET_SAMPLE_RATE)
+            if self._stream_sample_rate != TARGET_SAMPLE_RATE:
+                self._resampler = self._make_resampler(self._stream_sample_rate, TARGET_SAMPLE_RATE)
+
+            logger.info("Microphone listening — say 'Hey Clarity' or press Space (testing)")
+            while self._running:
+                # Check for space bar / UI trigger (skip wake word)
+                try:
+                    self._trigger_queue.get_nowait()
+                    logger.info("Trigger (space bar) — listening for command")
+                    self._set_state("LISTENING")
+                    command = self._capture_command(recognizer)
+                    if command:
+                        self._process_command(command, raw_text=command)
+                    else:
+                        logger.info("No command heard, returning to idle")
+                        self._set_state("IDLE")
+                    continue
+                except queue.Empty:
+                    pass
+                self._listen_for_wake(recognizer)
+
+        finally:
+            try:
+                if "stream" in locals() and stream is not None:
+                    stream.__exit__(None, None, None)
+            except Exception:
+                pass
         except Exception as e:
             logger.error(f"Failed to open microphone: {e}")
             return
 
         logger.info("Microphone closed")
 
+    def _make_resampler(self, src_rate: int, dst_rate: int):
+        """
+        Build a lightweight resampler to 16kHz for Vosk.
+        Prefer `samplerate` (fast, high-quality). If unavailable, fall back to `audioop`.
+        """
+        try:
+            import numpy as np  # type: ignore
+            import samplerate  # type: ignore
+
+            converter = samplerate.Resampler(converter_type="sinc_fastest", channels=1)
+            ratio = float(dst_rate) / float(src_rate)
+
+            def _resample(pcm16_bytes: bytes) -> bytes:
+                x = np.frombuffer(pcm16_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+                y = converter.process(x, ratio, end_of_input=False)
+                y = (y * 32768.0).clip(-32768, 32767).astype(np.int16)
+                return y.tobytes()
+
+            logger.info(f"Resampling mic audio {src_rate} -> {dst_rate} using samplerate")
+            return _resample
+        except Exception:
+            import audioop
+
+            def _resample(pcm16_bytes: bytes) -> bytes:
+                out, _ = audioop.ratecv(pcm16_bytes, 2, 1, src_rate, dst_rate, None)
+                return out
+
+            logger.info(f"Resampling mic audio {src_rate} -> {dst_rate} using audioop")
+            return _resample
+
     def _read_audio_block(self, timeout: float = 0.5) -> Optional[bytes]:
         """Read one audio block from the queue (non-blocking with timeout)."""
         try:
-            return self._audio_queue.get(timeout=timeout)
+            data = self._audio_queue.get(timeout=timeout)
+            if self._resampler is not None:
+                try:
+                    return self._resampler(data)
+                except Exception:
+                    return data
+            return data
         except queue.Empty:
             return None
 

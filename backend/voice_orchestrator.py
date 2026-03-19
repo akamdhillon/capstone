@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter
-import ollama
 from pydantic import BaseModel
 import httpx
 
 from config import settings
+from ollama_client import get_ollama_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -78,6 +78,9 @@ try:
 except FileNotFoundError:
     logger.error("prompts/clarity.txt not found! Voice assistant will fail.")
     SYSTEM_PROMPT = "You are a helpful wellness assistant. Always output JSON."
+
+
+_ollama_client = get_ollama_client(settings.OLLAMA_HOST)
 
 async def _execute_jetson_action(action_name: str, params: dict, user_id: str) -> dict:
     # Backend-only camera: never pass image from frontend; Jetson captures.
@@ -540,7 +543,7 @@ async def process_voice_intent(request: VoiceIntentRequest):
     logger.info(f"Sending to LLM")
 
     try:
-        response = ollama.chat(
+        response = _ollama_client.chat(
             model=settings.OLLAMA_MODEL,
             messages=messages,
             options={

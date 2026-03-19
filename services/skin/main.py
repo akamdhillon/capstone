@@ -23,12 +23,6 @@ def _is_lfs_pointer(path: Path) -> bool:
 
 def _load_model():
     global _inference_system
-    # Test mode: use mock so tests run without real model (no production fallback)
-    import sys
-    if "pytest" in sys.modules:
-        from unittest.mock import MagicMock
-        _inference_system = MagicMock()
-        return
     if not _MODEL_PATH.exists():
         raise SystemExit(
             f"Skin model not found at {_MODEL_PATH}. "

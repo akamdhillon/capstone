@@ -237,7 +237,7 @@ function DebugResultSummary({ event }: { event: DebugEvent }) {
         return (
             <div className="space-y-1 text-white/70">
                 <p>Overall: {d.overall_score != null ? String(d.overall_score) : '--'}</p>
-                <p>Skin: {s?.skin ?? '--'} | Posture: {s?.posture ?? '--'} | Eyes: {s?.eyes ?? '--'} | Thermal: {s?.thermal ?? '--'}</p>
+                <p>Skin: {s?.skin ?? '--'} | Posture: {s?.posture ?? '--'} | Eyes: {s?.eyes ?? '--'}</p>
             </div>
         );
     }

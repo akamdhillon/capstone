@@ -35,6 +35,8 @@ class Settings:
     
     # LLM
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
+    OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    OLLAMA_STARTUP_TIMEOUT_SEC = float(os.getenv("OLLAMA_STARTUP_TIMEOUT_SEC", "5"))
 
     # Service Ports
     SERVICES_FACE_PORT = 8002

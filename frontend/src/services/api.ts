@@ -5,7 +5,6 @@ export interface AnalysisScores {
     skin: number | null;
     posture: number | null;
     eyes: number | null;
-    thermal: number | null;
 }
 
 export interface AnalysisResult {
@@ -30,7 +29,6 @@ export interface User {
 export interface HealthStatus {
     status: string;
     service: string;
-    thermal_enabled: boolean;
     weights: Record<string, number>;
 }
 
@@ -87,7 +85,6 @@ export interface DebugAnalysisResult {
         skin: number | null;
         posture: number | null;
         eyes: number | null;
-        thermal: number | null;
     };
     overall_score: number | null;
     captured_image: string | null;
@@ -95,7 +92,6 @@ export interface DebugAnalysisResult {
         skin: Record<string, unknown> | null;
         posture: Record<string, unknown> | null;
         eyes: Record<string, unknown> | null;
-        thermal: Record<string, unknown> | null;
     };
     errors: string[];
     timing_ms: number;
@@ -107,11 +103,10 @@ export interface BackendDebugInfo {
         python_version: string;
     };
     configuration: {
-        jetson_ip: string;
-        thermal_enabled: boolean;
+        services_host: string;
         dev_mode: boolean;
     };
-    jetson_connectivity: Record<string, { reachable: boolean; url: string }>;
+    connectivity: Record<string, { reachable: boolean; url: string }>;
     errors: Record<string, string> | null;
     all_services_reachable: boolean;
 }
@@ -220,7 +215,6 @@ export interface DailySummary {
     } | null;
     trend: 'improving' | 'declining' | 'stable' | 'no_data';
     latest_eye?: { score: number; details?: Record<string, unknown>; timestamp?: string } | null;
-    latest_thermal?: { score: number; details?: Record<string, unknown>; timestamp?: string } | null;
 }
 
 export interface PostureResultEntry {
@@ -249,15 +243,6 @@ export async function saveEyeResult(score: number, details?: Record<string, unkn
         body: JSON.stringify({ score, details: details ?? null, user_id: userId ?? null }),
     });
     if (!response.ok) throw new Error('Failed to save eye result');
-}
-
-export async function saveThermalResult(score: number, details?: Record<string, unknown>, userId?: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/api/thermal/results`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ score, details: details ?? null, user_id: userId ?? null }),
-    });
-    if (!response.ok) throw new Error('Failed to save thermal result');
 }
 
 export async function getPostureResults(userId?: string): Promise<PostureResultEntry[]> {

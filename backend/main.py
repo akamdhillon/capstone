@@ -22,6 +22,7 @@ from config import settings
 from routes import analysis, face
 import voice_orchestrator
 from voice_listener import VoiceListener
+from ollama_client import wait_for_ollama
 
 # --- WebSocket Manager ---
 class ConnectionManager:
@@ -75,6 +76,11 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Clarity+ Backend...")
     
     logger.info(f"Scoring weights: {settings.weights}")
+    try:
+        await wait_for_ollama(settings.OLLAMA_HOST, settings.OLLAMA_STARTUP_TIMEOUT_SEC)
+        logger.info(f"Ollama reachable at {settings.OLLAMA_HOST}")
+    except Exception as e:
+        logger.warning(f"Ollama not reachable at {settings.OLLAMA_HOST}: {e}")
 
     # Start voice listener (mic -> Vosk -> orchestrator -> TTS)
     loop = asyncio.get_running_loop()

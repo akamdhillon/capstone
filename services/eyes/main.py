@@ -9,7 +9,6 @@ Runs on port 8005.
 """
 
 import base64
-import sys
 import threading
 import time
 import uuid
@@ -24,7 +23,7 @@ from pydantic import BaseModel
 app = FastAPI(title="Clarity+ Eye Strain Service")
 logger = logging.getLogger("service.eyes")
 
-# Load analyzer at startup (mock in pytest)
+# Load analyzer at startup
 _analyzer = None
 _stream_sessions: dict[str, "BlinkTracker"] = {}
 # Session data for stream-by-frame mode: session_id -> { tracker, ear_list, redness_list, puffiness_list }
@@ -34,22 +33,6 @@ _stream_session_lock = threading.Lock()
 
 def _load_analyzer():
     global _analyzer
-    if "pytest" in sys.modules:
-        from unittest.mock import MagicMock
-
-        _analyzer = MagicMock()
-        _analyzer.analyze_frame = MagicMock(
-            return_value={
-                "ear": 0.28,
-                "eye_openness": "Partial",
-                "sclera_redness": 1.8,
-                "puffiness": "Moderate",
-                "blink_rate": None,
-                "drowsiness": "Mild",
-                "score": 74,
-            }
-        )
-        return
     from inference import EyeStrainAnalyzer
 
     # Use False so one instance works for both image and stream

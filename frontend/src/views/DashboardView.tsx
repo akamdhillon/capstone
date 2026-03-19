@@ -124,12 +124,6 @@ export function DashboardView() {
                         score={summary?.latest_eye?.score ?? null}
                         sublabel="Strain check"
                     />
-                    <ScoreCard
-                        label="Thermal"
-                        score={summary?.latest_thermal?.score ?? null}
-                        sublabel="Face scan"
-                        disabled={summary?.latest_thermal?.score == null}
-                    />
                 </div>
 
                 {/* Quick stats bar */}
