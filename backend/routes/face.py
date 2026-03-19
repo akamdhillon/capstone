@@ -3,7 +3,7 @@
 # =============================================================================
 """
 Proxy routes for face detection, enrollment, and recognition.
-Forwards requests to the Jetson face service and manages local user storage.
+Forwards requests to the local face service and manages local user storage.
 """
 
 import json
@@ -24,8 +24,8 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-FACE_SERVICE_URL = f"http://{settings.JETSON_IP}:{settings.JETSON_FACE_PORT}"
-JETSON_ORCHESTRATOR_URL = f"http://{settings.JETSON_IP}:8001"
+FACE_SERVICE_URL = f"http://{settings.SERVICES_HOST}:{settings.SERVICES_FACE_PORT}"
+SERVICES_ORCHESTRATOR_URL = f"http://{settings.SERVICES_HOST}:8001"
 FACE_USERS_FILE = Path(__file__).resolve().parent.parent / "data" / "face_users.json"
 REQUEST_TIMEOUT = 30.0
 
@@ -69,7 +69,7 @@ def _save_users(users: dict):
 # Helper to call face service
 # ---------------------------------------------------------------------------
 async def _call_face_service(endpoint: str, payload: dict) -> dict:
-    """Forward a request to the Jetson face service."""
+    """Forward a request to the local face service."""
     url = f"{FACE_SERVICE_URL}{endpoint}"
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
@@ -99,7 +99,7 @@ async def _call_face_service(endpoint: str, payload: dict) -> dict:
 
 @router.post("/face/detect")
 async def detect_face(request: DetectRequest):
-    """Proxy to Jetson face detection."""
+    """Proxy to face detection."""
     return await _call_face_service("/face/detect", {"image": request.image})
 
 
@@ -117,7 +117,7 @@ async def enroll_face(request: EnrollRequest):
     if len(request.images) < 2:
         raise HTTPException(status_code=400, detail="At least 2 images required")
 
-    # Call Jetson face service
+    # Call face service
     result = await _call_face_service("/face/enroll", {"images": request.images})
 
     embedding = result.get("embedding")
@@ -152,7 +152,7 @@ async def recognize_face(request: RecognizeRequest):
     """
     Recognize a face:
     1. Load all enrolled embeddings
-    2. Call Jetson /face/recognize with image + known embeddings
+    2. Call /face/recognize with image + known embeddings
     3. Return match result with user name
     """
     users = _load_users()
@@ -196,8 +196,8 @@ async def recognize_face(request: RecognizeRequest):
 
 @router.post("/face/capture-frame")
 async def capture_frame():
-    """Capture a frame from Jetson camera. Returns base64 image for backend-driven flows."""
-    url = f"{JETSON_ORCHESTRATOR_URL}/capture-frame"
+    """Capture a frame from the services camera. Returns base64 image for backend-driven flows."""
+    url = f"{SERVICES_ORCHESTRATOR_URL}/capture-frame"
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             response = await client.post(url)
@@ -207,7 +207,7 @@ async def capture_frame():
                 raise HTTPException(status_code=503, detail=data.get("error", "Capture failed"))
             return {"success": True, "image": data.get("image")}
     except httpx.ConnectError:
-        raise HTTPException(status_code=503, detail=f"Cannot connect to Jetson at {url}")
+        raise HTTPException(status_code=503, detail=f"Cannot connect to services at {url}")
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Capture timed out")
 
@@ -218,7 +218,7 @@ class EnrollCaptureRequest(BaseModel):
 @router.post("/face/enroll-capture")
 async def enroll_capture(req: EnrollCaptureRequest = None):
     """
-    Capture 3 frames from Jetson camera and enroll (Option A: timed capture).
+    Capture 3 frames from services camera and enroll (Option A: timed capture).
     Name defaults to 'New User' if not provided.
     """
     import asyncio
@@ -226,7 +226,7 @@ async def enroll_capture(req: EnrollCaptureRequest = None):
     for step in range(3):
         try:
             async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-                res = await client.post(f"{JETSON_ORCHESTRATOR_URL}/capture-frame")
+                res = await client.post(f"{SERVICES_ORCHESTRATOR_URL}/capture-frame")
                 if res.status_code == 200:
                     data = res.json()
                     if data.get("success") and data.get("image"):
@@ -248,11 +248,11 @@ async def enroll_capture(req: EnrollCaptureRequest = None):
 @router.post("/face/recognize-capture")
 async def recognize_capture():
     """
-    Capture from Jetson camera and run face recognition.
+    Capture from services camera and run face recognition.
     No image from frontend — backend/Jetson owns camera.
     Returns match result; broadcasts display_name/user_id via caller.
     """
-    url = f"{JETSON_ORCHESTRATOR_URL}/capture-frame"
+    url = f"{SERVICES_ORCHESTRATOR_URL}/capture-frame"
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             response = await client.post(url)

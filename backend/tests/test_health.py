@@ -9,7 +9,7 @@ async def test_health_returns_200(client):
     body = resp.json()
     assert body["status"] == "ok"
     assert body["service"] == "clarity-backend"
-    assert "thermal_enabled" in body
+    assert "thermal_enabled" not in body
 
 
 async def test_root_returns_api_info(client):

@@ -18,7 +18,7 @@ router = APIRouter()
 
 _THIS_DIR = Path(__file__).resolve().parent
 
-JETSON_ORCHESTRATOR_URL = f"http://{settings.JETSON_IP}:8001"
+SERVICES_ORCHESTRATOR_URL = f"http://{settings.SERVICES_HOST}:8001"
 BACKEND_URL = settings.BACKEND_BASE_URL
 
 # Simple global state for voice-driven enrollment naming.

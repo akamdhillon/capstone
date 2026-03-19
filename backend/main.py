@@ -48,7 +48,7 @@ _voice_listener: VoiceListener | None = None
 # --- SSE Debug Events ---
 from debug_events import emit_debug_event, get_sse_listeners, frame_poller_context
 
-JETSON_CAPTURE_URL = f"http://{settings.JETSON_IP}:8001/capture-frame"
+SERVICES_CAPTURE_URL = f"http://{settings.SERVICES_HOST}:8001/capture-frame"
 
 # --- Models ---
 class VoiceStatus(BaseModel):
@@ -74,7 +74,6 @@ async def lifespan(app: FastAPI):
     global _voice_listener
     logger.info("Starting Clarity+ Backend...")
     
-    logger.info(f"Thermal hardware: {'ENABLED' if settings.THERMAL_ENABLED else 'DISABLED'}")
     logger.info(f"Scoring weights: {settings.weights}")
 
     # Start voice listener (mic -> Vosk -> orchestrator -> TTS)
@@ -298,9 +297,9 @@ async def run_posture(req: PostureRunRequest = None):
     import httpx
     user_id = (req.user_id if req else None) or "unknown"
     await emit_debug_event({"type": "progress", "phase": "running", "service": "posture", "message": "Running posture analysis (5s capture)..."})
-    url = f"http://{settings.JETSON_IP}:{settings.JETSON_POSTURE_PORT}/posture/run"
+    url = f"http://{settings.SERVICES_HOST}:{settings.SERVICES_POSTURE_PORT}/posture/run"
     try:
-        async with frame_poller_context(JETSON_CAPTURE_URL):
+        async with frame_poller_context(SERVICES_CAPTURE_URL):
             async with httpx.AsyncClient(timeout=35.0) as client:
                 response = await client.post(url, json={"user_id": user_id})
                 response.raise_for_status()
@@ -437,9 +436,9 @@ async def run_skin(req: SkinRunRequest = None):
     import httpx
     user_id = (req.user_id if req else None) or "unknown"
     await emit_debug_event({"type": "progress", "phase": "running", "service": "skin", "message": "Running skin analysis..."})
-    url = f"http://{settings.JETSON_IP}:8001/skin/run"
+    url = f"http://{settings.SERVICES_HOST}:8001/skin/run"
     try:
-        async with frame_poller_context(JETSON_CAPTURE_URL):
+        async with frame_poller_context(SERVICES_CAPTURE_URL):
             async with httpx.AsyncClient(timeout=35.0) as client:
                 payload = {} if not req else {"user_id": user_id}
                 response = await client.post(url, json=payload)
@@ -523,7 +522,6 @@ async def health_check():
     return {
         "status": "ok",
         "service": "clarity-backend",
-        "thermal_enabled": settings.THERMAL_ENABLED
     }
 
 

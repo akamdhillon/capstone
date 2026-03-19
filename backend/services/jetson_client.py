@@ -1,8 +1,8 @@
 # =============================================================================
-# CLARITY+ BACKEND - JETSON ML CLIENT (UNIFIED)
+# CLARITY+ BACKEND - SERVICES CLIENT (UNIFIED)
 # =============================================================================
 """
-Async HTTP client for communicating with the Unified Jetson ML Service.
+Async HTTP client for communicating with the local ML services orchestrator.
 Single endpoint handles image capture and multi-model inference.
 """
 
@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 # Request timeout in seconds (Orchestrator needs more time to run all models)
 REQUEST_TIMEOUT = 30.0
-# Unified Port (should match Jetson main.py)
-JETSON_PORT = 8001
+# Unified Port (should match services/main.py)
+SERVICES_PORT = 8001
 
 
 @dataclass
@@ -29,11 +29,9 @@ class MLResults:
     skin_score: Optional[float] = None
     posture_score: Optional[float] = None
     eye_score: Optional[float] = None
-    thermal_score: Optional[float] = None
     skin_details: Optional[dict] = None
     posture_details: Optional[dict] = None
     eye_details: Optional[dict] = None
-    thermal_details: Optional[dict] = None
     captured_image: Optional[str] = None
     errors: list[str] = None
     
@@ -42,15 +40,15 @@ class MLResults:
             self.errors = []
 
 
-class JetsonClient:
+class ServicesClient:
     """
-    Async client for the Unified Jetson ML Service.
+    Async client for the unified services orchestrator.
     Communicates via Port 8001 (Unified Endpoint).
     """
     
     def __init__(self):
         self.settings = settings
-        self.base_url = f"http://{self.settings.JETSON_IP}:{JETSON_PORT}"
+        self.base_url = f"http://{self.settings.SERVICES_HOST}:{SERVICES_PORT}"
     
     async def _make_request(
         self,
@@ -58,7 +56,7 @@ class JetsonClient:
         method: str = "POST",
         data: Optional[dict] = None
     ) -> tuple[Optional[dict], Optional[str]]:
-        """Make a request to the Jetson unified service."""
+        """Make a request to the unified services orchestrator."""
         url = f"{self.base_url}{endpoint}"
         
         try:
@@ -133,21 +131,18 @@ class JetsonClient:
         results.skin_score = get_score("skin")
         results.posture_score = get_score("posture")
         results.eye_score = get_score("eyes")
-        results.thermal_score = get_score("thermal")
         
         # Parse Details
         results.skin_details = raw_results.get("skin")
         results.posture_details = raw_results.get("posture")
         results.eye_details = raw_results.get("eyes")
-        results.thermal_details = raw_results.get("thermal")
         
         # Parse Image
         results.captured_image = data.get("image")
         
         logger.info(
             f"Analysis complete: skin={results.skin_score}, "
-            f"posture={results.posture_score}, eyes={results.eye_score}, "
-            f"thermal={results.thermal_score}"
+            f"posture={results.posture_score}, eyes={results.eye_score}"
         )
         
         return results

@@ -129,7 +129,6 @@ SERVICES = {
     "skin": 8003,
     "posture": 8004,
     "eyes": 8005,
-    "thermal": 8006
 }
 
 logger = logging.getLogger("orchestrator")

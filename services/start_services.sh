@@ -45,19 +45,16 @@ trap cleanup SIGINT SIGTERM
 # ── Start Microservices ───────────────────────────────────────────────
 echo ""
 echo "Starting Face Service (Port 8002)..."
-python3 services/face/main.py > services/face/service.log 2>&1 &
+python3 face/main.py > face/service.log 2>&1 &
 
 echo "Starting Skin Service (Port 8003)..."
-python3 services/skin/main.py > services/skin/service.log 2>&1 &
+python3 skin/main.py > skin/service.log 2>&1 &
 
 echo "Starting Posture Service (Port 8004)..."
-python3 services/posture/main.py > services/posture/service.log 2>&1 &
+python3 posture/main.py > posture/service.log 2>&1 &
 
 echo "Starting Eyes Service (Port 8005)..."
-python3 services/eyes/main.py > services/eyes/service.log 2>&1 &
-
-echo "Starting Thermal Service (Port 8006)..."
-python3 services/thermal/main.py > services/thermal/service.log 2>&1 &
+python3 eyes/main.py > eyes/service.log 2>&1 &
 
 # Wait for services to spin up
 echo ""
@@ -67,7 +64,7 @@ sleep 3
 # Check which services started successfully
 echo ""
 echo "Service status:"
-for port in 8002 8003 8004 8005 8006; do
+for port in 8002 8003 8004 8005; do
     if lsof -i :$port -sTCP:LISTEN > /dev/null 2>&1; then
         echo "  ✓ Port $port - running"
     else

@@ -14,7 +14,6 @@ def _jetson_analyze_response():
             "skin": {"score": 80},
             "posture": {"score": 70},
             "eyes": {"score": 90},
-            "thermal": {"score": 60},
         },
         "image": "base64img",
         "errors": [],
@@ -27,7 +26,7 @@ def _mock_httpx_response(json_body, status_code=200):
 
 @pytest.fixture(autouse=True)
 def _mock_jetson(monkeypatch):
-    """Patch JetsonClient._make_request so no real Jetson calls are made."""
+    """Patch ServicesClient._make_request so no real network calls are made."""
     async def fake_make_request(self, endpoint, method="POST", data=None):
         if endpoint == "/analyze":
             return _jetson_analyze_response(), None
@@ -35,7 +34,7 @@ def _mock_jetson(monkeypatch):
             return {"status": "ok"}, None
         return None, "Not found"
 
-    monkeypatch.setattr("services.jetson_client.JetsonClient._make_request", fake_make_request)
+    monkeypatch.setattr("services.jetson_client.ServicesClient._make_request", fake_make_request)
 
 
 async def test_analyze_returns_scored_results(client):
@@ -47,11 +46,11 @@ async def test_analyze_returns_scored_results(client):
 
 
 async def test_jetson_health(client):
-    resp = await client.get("/api/jetson/health")
+    resp = await client.get("/api/services/health")
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ok"
-    assert "thermal_enabled" in body
+    assert "services" in body
 
 
 async def test_debug_analyze(client):

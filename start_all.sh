@@ -3,7 +3,7 @@
 # =============================================================================
 # Clarity+ — Start All Services (macOS compatible)
 # =============================================================================
-# Launches backend (8000), jetson ML services (8001-8006), and frontend (3000).
+# Launches backend (8000), local ML services (8001-8006), and frontend (3000).
 # Ctrl+C stops everything.
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -51,7 +51,7 @@ wait_for_port() {
 
 # Kill anything already on our ports
 echo -e "${BOLD}Cleaning up stale processes...${NC}"
-for port in 8000 8001 8002 8003 8004 8005 8006 3000; do
+for port in 8000 8001 8002 8003 8004 8005 3000; do
     pid=$(lsof -ti :"$port" 2>/dev/null)
     if [ -n "$pid" ]; then
         echo "  Killing process on port $port (pid $pid)"
@@ -99,11 +99,11 @@ wait_for_port 8000 "Backend"
 BACKEND_OK=$?
 deactivate 2>/dev/null
 
-# ── 2. Jetson ML Services (ports 8001-8006) ───────────────────────────
+# ── 2. Local ML Services (ports 8001-8005) ────────────────────────────
 echo ""
-echo -e "${CYAN}[2/3] Jetson ML Services (ports 8001-8006)${NC}"
+echo -e "${CYAN}[2/3] Services (ports 8001-8005)${NC}"
 
-cd "$ROOT_DIR/jetson"
+cd "$ROOT_DIR/services"
 
 if [ ! -d "venv" ]; then
     echo "  Creating virtual environment..."
@@ -112,29 +112,27 @@ fi
 
 source venv/bin/activate
 
-# Install Jetson Python deps only when requirements change
+# Install services Python deps only when requirements change
 REQ_HASH_FILE=".venv_requirements_hash"
 CURRENT_HASH="$(shasum requirements.txt 2>/dev/null | awk '{print $1}')"
 SAVED_HASH="$(cat "$REQ_HASH_FILE" 2>/dev/null || echo "")"
 
 if [ "$CURRENT_HASH" != "$SAVED_HASH" ] || [ -z "$SAVED_HASH" ]; then
-    echo "  Installing Jetson Python dependencies..."
+    echo "  Installing services Python dependencies..."
     pip install -r requirements.txt
     echo "$CURRENT_HASH" > "$REQ_HASH_FILE"
 else
-    echo "  Jetson Python dependencies up to date."
+    echo "  Services Python dependencies up to date."
 fi
 
 echo "  Starting microservices..."
-python3 services/face/main.py &
+python3 face/main.py &
 PIDS+=($!)
-python3 services/skin/main.py &
+python3 skin/main.py &
 PIDS+=($!)
-python3 services/posture/main.py &
+python3 posture/main.py &
 PIDS+=($!)
-python3 services/eyes/main.py &
-PIDS+=($!)
-python3 services/thermal/main.py &
+python3 eyes/main.py &
 PIDS+=($!)
 
 JETSON_OK=0
@@ -145,8 +143,6 @@ wait_for_port 8003 "Skin service"
 wait_for_port 8004 "Posture service"
 [ $? -ne 0 ] && JETSON_OK=1
 wait_for_port 8005 "Eyes service"
-[ $? -ne 0 ] && JETSON_OK=1
-wait_for_port 8006 "Thermal service"
 [ $? -ne 0 ] && JETSON_OK=1
 
 echo "  Starting orchestrator..."
@@ -195,7 +191,7 @@ echo ""
 echo -e "  Frontend:     http://localhost:3000"
 echo -e "  Backend API:  http://localhost:8000"
 echo -e "  Backend docs: http://localhost:8000/docs"
-echo -e "  Jetson:       http://localhost:8001"
+echo -e "  Services:     http://localhost:8001"
 echo ""
 echo -e "${BOLD}  Press Ctrl+C to stop everything.${NC}"
 

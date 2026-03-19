@@ -3,7 +3,7 @@
 # =============================================================================
 """
 Wellness Scoring Engine that aggregates ML analysis results into a 0-100 score.
-Implements weighted formula with dynamic thermal weight redistribution.
+Implements weighted formula for enabled services.
 """
 
 import logging
@@ -21,16 +21,13 @@ class AnalysisScores:
     skin: Optional[float] = None
     posture: Optional[float] = None
     eyes: Optional[float] = None
-    thermal: Optional[float] = None
 
 
 class WellnessScoringEngine:
     """
     Wellness Scoring Engine.
     
-    Aggregates scores from individual ML services using weighted formula:
-    - Default: Skin (30%) + Posture (25%) + Eyes (25%) + Thermal (20%)
-    - Without thermal: Skin (40%) + Posture (35%) + Eyes (25%)
+    Aggregates scores from individual ML services using weighted formula.
     """
     
     def __init__(self):
@@ -42,17 +39,11 @@ class WellnessScoringEngine:
         """Current scoring weights based on thermal hardware status."""
         return self._weights
     
-    @property
-    def thermal_enabled(self) -> bool:
-        """Whether thermal hardware is connected."""
-        return self.settings.THERMAL_ENABLED
-    
     def calculate(
         self,
         skin_score: Optional[float] = None,
         posture_score: Optional[float] = None,
         eye_score: Optional[float] = None,
-        thermal_score: Optional[float] = None
     ) -> tuple[float, dict[str, float]]:
         """
         Calculate the overall wellness score.
@@ -70,7 +61,6 @@ class WellnessScoringEngine:
             "skin": skin_score,
             "posture": posture_score,
             "eyes": eye_score,
-            "thermal": thermal_score
         }
         
         # Filter out None values and get available weights
@@ -106,7 +96,7 @@ class WellnessScoringEngine:
         logger.debug(
             f"Wellness score calculated: {overall:.1f} "
             f"(skin={skin_score}, posture={posture_score}, "
-            f"eyes={eye_score}, thermal={thermal_score})"
+            f"eyes={eye_score})"
         )
         
         return round(overall, 2), self._weights
@@ -116,7 +106,6 @@ def calculate_wellness_score(
     skin_score: Optional[float] = None,
     posture_score: Optional[float] = None,
     eye_score: Optional[float] = None,
-    thermal_score: Optional[float] = None
 ) -> tuple[float, dict[str, float]]:
     """
     Convenience function for wellness score calculation.
@@ -135,5 +124,4 @@ def calculate_wellness_score(
         skin_score=skin_score,
         posture_score=posture_score,
         eye_score=eye_score,
-        thermal_score=thermal_score
     )

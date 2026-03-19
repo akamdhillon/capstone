@@ -8,7 +8,6 @@ class AnalysisScores(BaseModel):
     skin: Optional[float] = None
     posture: Optional[float] = None
     eyes: Optional[float] = None
-    thermal: Optional[float] = None
 
 class AnalysisResult(BaseModel):
     id: int
@@ -26,7 +25,6 @@ class AnalysisHistory(BaseModel):
     skin_score: Optional[float]
     posture_score: Optional[float]
     eye_score: Optional[float]
-    thermal_score: Optional[float]
     computed_score: float
 
 

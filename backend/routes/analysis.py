@@ -3,7 +3,7 @@
 # =============================================================================
 """
 API routes for wellness analysis operations.
-Stateless - Pass-through to Jetson and Scoring Engine.
+Stateless - Pass-through to local services orchestrator and scoring engine.
 """
 
 import logging
@@ -16,9 +16,9 @@ from config import settings
 from models import AnalysisRequest, AnalysisResult
 from debug_events import frame_poller_context, emit_debug_event
 
-JETSON_CAPTURE_URL = f"http://{settings.JETSON_IP}:8001/capture-frame"
+SERVICES_CAPTURE_URL = f"http://{settings.SERVICES_HOST}:8001/capture-frame"
 from services.wellness import WellnessService
-from services.jetson_client import JetsonClient
+from services.jetson_client import ServicesClient
 from services.wellness_scoring import WellnessScoringEngine
 
 logger = logging.getLogger(__name__)
@@ -42,17 +42,16 @@ async def trigger_analysis(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/jetson/health")
-async def check_jetson_health():
-    """Check health status of all Jetson ML services."""
-    client = JetsonClient()
+@router.get("/services/health")
+async def check_services_health():
+    """Check health status of local ML services."""
+    client = ServicesClient()
     health = await client.health_check()
     all_healthy = all(health.values())
     
     return {
         "status": "ok" if all_healthy else "degraded",
         "services": health,
-        "thermal_enabled": settings.THERMAL_ENABLED
     }
 
 
@@ -67,20 +66,19 @@ async def debug_info():
     import sys
     import httpx
     
-    client = JetsonClient()
+    client = ServicesClient()
     connectivity = {}
     errors = {}
     
     services = [
-        ("face_recognition", settings.JETSON_FACE_PORT, "/health"),
-        ("skin_analysis", settings.JETSON_SKIN_PORT, "/health"),
-        ("posture", settings.JETSON_POSTURE_PORT, "/health"),
-        ("eye_strain", settings.JETSON_EYE_PORT, "/health"),
-        ("thermal", settings.JETSON_THERMAL_PORT, "/health"),
+        ("face_recognition", settings.SERVICES_FACE_PORT, "/health"),
+        ("skin_analysis", settings.SERVICES_SKIN_PORT, "/health"),
+        ("posture", settings.SERVICES_POSTURE_PORT, "/health"),
+        ("eye_strain", settings.SERVICES_EYES_PORT, "/health"),
     ]
     
     for name, port, endpoint in services:
-        url = f"http://{settings.JETSON_IP}:{port}{endpoint}"
+        url = f"http://{settings.SERVICES_HOST}:{port}{endpoint}"
         try:
             async with httpx.AsyncClient(timeout=3.0) as http_client:
                 response = await http_client.get(url)
@@ -92,7 +90,7 @@ async def debug_info():
     return {
         "platform": {"system": platform.system(), "python_version": sys.version},
         "configuration": {
-            "jetson_ip": settings.JETSON_IP,
+            "services_host": settings.SERVICES_HOST,
             "rpi_ip": settings.RPI_IP,
             "weights": settings.weights
         },
@@ -116,8 +114,8 @@ async def debug_analyze(request: DebugAnalyzeRequest = None):
     await emit_debug_event({"type": "progress", "phase": "capturing", "service": "full", "message": "Capturing frame for full scan...", "elapsed_ms": 0})
     
     image = request.image if request else None
-    client = JetsonClient()
-    async with frame_poller_context(JETSON_CAPTURE_URL):
+    client = ServicesClient()
+    async with frame_poller_context(SERVICES_CAPTURE_URL):
         ml_results = await client.run_full_analysis(image=image)
     
     engine = WellnessScoringEngine()
@@ -125,7 +123,6 @@ async def debug_analyze(request: DebugAnalyzeRequest = None):
         skin_score=ml_results.skin_score,
         posture_score=ml_results.posture_score,
         eye_score=ml_results.eye_score,
-        thermal_score=ml_results.thermal_score
     )
     
     elapsed_ms = (time.time() - start_time) * 1000
@@ -136,7 +133,6 @@ async def debug_analyze(request: DebugAnalyzeRequest = None):
             "skin": ml_results.skin_score,
             "posture": ml_results.posture_score,
             "eyes": ml_results.eye_score,
-            "thermal": ml_results.thermal_score
         },
         "overall_score": overall_score,
         "captured_image": ml_results.captured_image,
@@ -144,7 +140,6 @@ async def debug_analyze(request: DebugAnalyzeRequest = None):
             "skin": ml_results.skin_details,
             "posture": ml_results.posture_details,
             "eyes": ml_results.eye_details,
-            "thermal": ml_results.thermal_details
         },
         "errors": ml_results.errors,
         "timing_ms": elapsed_ms
@@ -162,7 +157,7 @@ class SingleServiceRequest(BaseModel):
 
 @router.post("/debug/eyes")
 async def debug_eye_analysis(request: SingleServiceRequest = None):
-    """Run eye strain analysis via Jetson: 5s camera stream, EAR + blink rate + score. Saves result and shows debug feed."""
+    """Run eye strain analysis via services: 5s camera stream, EAR + blink rate + score. Saves result and shows debug feed."""
     import time
     import httpx
 
@@ -170,9 +165,9 @@ async def debug_eye_analysis(request: SingleServiceRequest = None):
     user_id = getattr(request, "user_id", None) or "unknown"
     await emit_debug_event({"type": "progress", "phase": "capturing", "service": "eyes", "message": "Capturing frames for eye analysis (5s)...", "elapsed_ms": 0})
 
-    orchestrator_url = f"http://{settings.JETSON_IP}:8001"
+    orchestrator_url = f"http://{settings.SERVICES_HOST}:8001"
     result = None
-    async with frame_poller_context(JETSON_CAPTURE_URL):
+    async with frame_poller_context(SERVICES_CAPTURE_URL):
         async with httpx.AsyncClient(timeout=35.0) as client:
             response = await client.post(
                 f"{orchestrator_url}/eyes/run",
@@ -214,7 +209,7 @@ async def debug_eye_analysis(request: SingleServiceRequest = None):
 
 @router.post("/debug/skin")
 async def debug_skin_analysis(request: SingleServiceRequest = None):
-    """Run skin analysis only via Jetson skin service."""
+    """Run skin analysis only via services skin service."""
     import time
     import httpx
 
@@ -223,7 +218,7 @@ async def debug_skin_analysis(request: SingleServiceRequest = None):
 
     # Use the full orchestrator which captures an image and calls all services,
     # then extract only the skin results
-    client = JetsonClient()
+    client = ServicesClient()
     ml_results = await client.run_full_analysis(image=image)
 
     elapsed_ms = (time.time() - start_time) * 1000

@@ -3,7 +3,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load .env from parent directory (repo root) if it exists, otherwise local
-# repo root is two levels up if we are in jetson/
+# repo root is two levels up if we are in services/
 env_path = Path(__file__).resolve().parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
