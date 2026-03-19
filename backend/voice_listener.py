@@ -1,105 +1,58 @@
 """
 Clarity+ Backend Voice Listener
 ================================
-Continuous microphone listener that uses Vosk for local speech-to-text.
-Detects "Hey Clarity" wake word, captures the command, processes it via
-the voice_orchestrator, and speaks the response via pyttsx3.
+Mac-first voice pipeline:
+- Porcupine wake word (via RealtimeSTT)
+- Speech capture + VAD (RealtimeSTT)
+- Transcription using mlx-whisper (`mlx-community/whisper-large-v3-turbo` by default)
+- Backend orchestration + TTS + WebSocket state updates
 
-Runs as a background thread started from main.py lifespan.
+Runs as a background thread started from `backend/main.py` lifespan.
 """
 
 import asyncio
-import json
 import logging
-import os
 import queue
 import re
 import threading
-import time
-from pathlib import Path
+import tempfile
+import wave
 from typing import Optional
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Lazy imports — these are heavy and may not be installed in test envs
-# ---------------------------------------------------------------------------
-vosk = None
-sd = None
-pyttsx3 = None
-
-
-def _ensure_imports():
-    global vosk, sd, pyttsx3
-    if vosk is None:
-        import vosk as _vosk
-        vosk = _vosk
-    if sd is None:
-        import sounddevice as _sd
-        sd = _sd
-    if pyttsx3 is None:
-        import pyttsx3 as _tts
-        pyttsx3 = _tts
-
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-TARGET_SAMPLE_RATE = 16000
-BLOCK_SIZE = 4000  # ~250 ms at 16 kHz
-
-# Bounded queue to avoid unbounded memory growth if the recognizer can't keep up.
-# When full, we drop the oldest audio so we always process the latest audio.
-MAX_AUDIO_QUEUE_SIZE = 24  # ~6s at 250ms blocks
-
-WAKE_VARIANTS = [
-    "hey clarity",
-    "hey clary",
-    "hey clari",
-    "hey clara",
-    "heyklarit",
-    "a clarity",
-    "hey clair",
-    "clarity",
-]
-
-COMMAND_TIMEOUT = 8.0  # seconds to wait for a command after wake word
-SILENCE_TIMEOUT = 2.0  # seconds of silence to consider the command done
-
-# Vosk model directory — will be auto-downloaded on first run
-_THIS_DIR = Path(__file__).resolve().parent
-MODEL_DIR = _THIS_DIR / "vosk-model"
-
-
-def _find_wake_word(text: str) -> tuple[bool, str]:
-    """Return (found, text_after_wake)."""
-    lower = text.lower().strip()
-    for variant in WAKE_VARIANTS:
-        idx = lower.find(variant)
-        if idx != -1:
-            after = lower[idx + len(variant):]
-            after = re.sub(r'^[,.\s!?]+', '', after).strip()
-            return True, after
-    return False, ""
-
-
-# ---------------------------------------------------------------------------
-# TTS Helper
+# TTS Helper (pyttsx3)
 # ---------------------------------------------------------------------------
 _tts_engine = None
 _tts_lock = threading.Lock()
+_tts_imported = False
+
+
+def _ensure_tts():
+    global _tts_imported
+    if _tts_imported:
+        return
+    import pyttsx3  # noqa: F401
+
+    _tts_imported = True
 
 
 def _speak(text: str):
     """Speak text using pyttsx3 (blocking, thread-safe)."""
-    global _tts_engine
     if not text:
         return
     try:
+        global _tts_engine
         with _tts_lock:
+            if not _tts_imported:
+                _ensure_tts()
             if _tts_engine is None:
-                _ensure_imports()
-                _tts_engine = pyttsx3.init()
+                import pyttsx3 as _pyttsx3
+
+                _tts_engine = _pyttsx3.init()
                 _tts_engine.setProperty("rate", 175)
             _tts_engine.say(text)
             _tts_engine.runAndWait()
@@ -107,18 +60,38 @@ def _speak(text: str):
         logger.error(f"TTS error: {e}")
 
 
-# ---------------------------------------------------------------------------
-# Voice Listener
-# ---------------------------------------------------------------------------
+def _strip_wake_word(text: str) -> str:
+    """
+    Remove the configured wake word from the beginning of Whisper output.
+    Porcupine detects the wake word, but Whisper may still include it in some cases.
+    """
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return cleaned
+
+    lower = cleaned.lower()
+
+    # Historical UI wording.
+    lower = re.sub(r"^hey\s+clarity\b", "", lower).strip()
+
+    wake_words = [w.strip().lower() for w in (settings.WAKE_WORDS or "").split(",") if w.strip()]
+    for w in wake_words:
+        w_esc = re.escape(w)
+        lower = re.sub(rf"^({w_esc})(\b[\s,:-]*)", "", lower).strip()
+        lower = re.sub(rf"^({w_esc})\b", "", lower).strip()
+
+    return lower
+
+
 class VoiceListener:
     """
     Background voice listener that:
-    1. Opens mic via sounddevice → queue → Vosk recognizer
-    2. Detects "Hey Clarity" wake word
-    3. Captures the command
-    4. Calls voice_orchestrator.process_voice_intent() in-process
-    5. Speaks the response via pyttsx3
-    6. Pushes state updates over WebSocket via ConnectionManager
+    1. Uses RealtimeSTT with Porcupine for wake-word detection
+    2. Captures a single utterance using VAD
+    3. Transcribes using mlx-whisper
+    4. Sends transcript through `voice_orchestrator.process_voice_intent()`
+    5. Speaks assistant response via pyttsx3
+    6. Pushes voice state updates over WebSocket
     """
 
     def __init__(self, ws_manager, event_loop: asyncio.AbstractEventLoop):
@@ -126,10 +99,10 @@ class VoiceListener:
         self._loop = event_loop
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        self._audio_queue: queue.Queue = queue.Queue(maxsize=MAX_AUDIO_QUEUE_SIZE)
-        self._trigger_queue: queue.Queue = queue.Queue()  # Space bar / test trigger
-        self._stream_sample_rate: int = TARGET_SAMPLE_RATE
-        self._resampler = None  # lazily created if needed
+
+        self._trigger_queue: queue.Queue[bool] = queue.Queue()
+        self._recorder = None
+        self._recorder_lock = threading.Lock()
 
     def start(self):
         if self._running:
@@ -141,291 +114,212 @@ class VoiceListener:
 
     def stop(self):
         self._running = False
+        with self._recorder_lock:
+            try:
+                if self._recorder is not None:
+                    self._recorder.shutdown()
+            except Exception:
+                pass
         if self._thread:
             self._thread.join(timeout=3)
         logger.info("Voice listener stopped")
 
     def trigger_listen(self):
-        """Skip wake word and go straight to listening (e.g. space bar for testing)."""
+        """
+        Skip wake word and capture the next utterance (space bar / UI testing).
+        """
         try:
             self._trigger_queue.put_nowait(True)
         except queue.Full:
             pass
+
+        # If the recorder is already live, start recording immediately.
+        with self._recorder_lock:
+            try:
+                if self._recorder is not None and not getattr(self._recorder, "is_recording", False):
+                    self._recorder.start()
+                    self._set_state("LISTENING")
+            except Exception:
+                pass
 
     # -- WebSocket broadcast helpers (thread-safe via event loop) --
 
     def _broadcast(self, data: dict):
         """Schedule a WebSocket broadcast on the main asyncio loop."""
         try:
-            asyncio.run_coroutine_threadsafe(
-                self._manager.broadcast(data), self._loop
-            )
+            asyncio.run_coroutine_threadsafe(self._manager.broadcast(data), self._loop)
         except Exception:
             pass
 
     def _set_state(self, state: str, caption: Optional[str] = None, transcript: Optional[str] = None):
-        msg = {"state": state}
+        msg: dict = {"state": state}
         if caption:
             msg["caption"] = caption
         if transcript:
             msg["transcript"] = transcript
         self._broadcast(msg)
 
-    # -- Audio callback for sounddevice --
+    # -- Audio -> text helpers --
 
-    def _audio_callback(self, indata, frames, time_info, status):
-        """Called by sounddevice for each audio block. Puts raw bytes in queue."""
-        if status:
-            logger.warning(f"Audio status: {status}")
+    def _maybe_apply_speex_ns(self, pcm16, sample_rate: int):
+        if not settings.SPEEX_NOISE_SUPPRESSION:
+            return pcm16
+
         try:
-            self._audio_queue.put_nowait(bytes(indata))
-        except queue.Full:
-            try:
-                _ = self._audio_queue.get_nowait()  # drop oldest
-            except queue.Empty:
-                pass
-            try:
-                self._audio_queue.put_nowait(bytes(indata))
-            except queue.Full:
-                pass
+            from speexdsp_ns import NoiseSuppression
+        except Exception as e:
+            logger.warning(f"Speex noise suppression requested but unavailable: {e}")
+            return pcm16
+
+        import numpy as np  # type: ignore
+
+        target_rate = 16000
+        if sample_rate != target_rate:
+            # Simple resampling for the optional preprocessor.
+            x = np.linspace(0.0, 1.0, num=len(pcm16), endpoint=False)
+            xi = np.linspace(0.0, 1.0, num=int(len(pcm16) * target_rate / sample_rate), endpoint=False)
+            pcm16 = np.interp(xi, x, pcm16).astype(np.int16)
+            sample_rate = target_rate
+
+        ns = NoiseSuppression.create(settings.SPEEX_FRAME_SIZE, sample_rate)
+        frame_size = settings.SPEEX_FRAME_SIZE
+        out = np.zeros_like(pcm16)
+
+        for start in range(0, len(pcm16), frame_size):
+            end = start + frame_size
+            frame = pcm16[start:end]
+            if len(frame) < frame_size:
+                pad = np.zeros(frame_size - len(frame), dtype=np.int16)
+                frame = np.concatenate([frame, pad], axis=0)
+            processed_bytes = ns.process(frame.tobytes())
+            processed_frame = np.frombuffer(processed_bytes, dtype=np.int16)
+            out[start:end] = processed_frame[: end - start]
+
+        return out
+
+    def _transcribe_with_mlx(self, pcm16, sample_rate: int) -> str:
+        """
+        Write PCM16 to a temporary WAV file and transcribe via mlx-whisper.
+        """
+        import numpy as np  # type: ignore
+        import mlx_whisper  # type: ignore
+
+        pcm16 = np.asarray(pcm16, dtype=np.int16)
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
+            with wave.open(tmp.name, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(int(sample_rate))
+                wf.writeframes(pcm16.tobytes())
+
+            result = mlx_whisper.transcribe(tmp.name, path_or_hf_repo=settings.WHISPER_MODEL)
+            return (result.get("text") or "").strip()
+
+    def _process_captured_audio(self, pcm16, sample_rate: int) -> Optional[str]:
+        if pcm16 is None or len(pcm16) == 0:
+            return None
+
+        pcm16 = self._maybe_apply_speex_ns(pcm16, sample_rate)
+        text = self._transcribe_with_mlx(pcm16, sample_rate)
+        if not text:
+            return None
+
+        command = _strip_wake_word(text)
+        return command or None
 
     # -- Main listener loop --
 
     def _run(self):
         try:
-            _ensure_imports()
-        except ImportError as e:
-            logger.error(f"Voice listener cannot start — missing dependency: {e}")
-            return
-
-        # --- Load or download Vosk model ---
-        if not MODEL_DIR.exists():
-            logger.info("Vosk model not found. Downloading small English model...")
-            try:
-                import urllib.request
-                import zipfile
-                import tempfile
-
-                model_url = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
-                with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-                    tmp_path = tmp.name
-                    logger.info(f"Downloading {model_url} ...")
-                    urllib.request.urlretrieve(model_url, tmp_path)
-
-                logger.info("Extracting model...")
-                with zipfile.ZipFile(tmp_path, "r") as zf:
-                    zf.extractall(_THIS_DIR)
-
-                os.unlink(tmp_path)
-
-                # The zip extracts to vosk-model-small-en-us-0.15/ — rename
-                extracted = _THIS_DIR / "vosk-model-small-en-us-0.15"
-                if extracted.exists():
-                    extracted.rename(MODEL_DIR)
-
-                logger.info(f"Vosk model ready at {MODEL_DIR}")
-            except Exception as e:
-                logger.error(f"Failed to download Vosk model: {e}")
-                logger.error("Please manually download a model from https://alphacephei.com/vosk/models")
-                logger.error(f"Extract it to: {MODEL_DIR}")
-                return
-
-        # Suppress Vosk logs
-        vosk.SetLogLevel(-1)
-
-        try:
-            model = vosk.Model(str(MODEL_DIR))
+            from RealtimeSTT import AudioToTextRecorder  # type: ignore
         except Exception as e:
-            logger.error(f"Failed to load Vosk model from {MODEL_DIR}: {e}")
+            logger.error(f"RealtimeSTT missing/unavailable; cannot start voice listener: {e}")
             return
 
-        logger.info("Vosk model loaded successfully")
+        logger.info(
+            f"Initializing voice listener (wake words={settings.WAKE_WORDS}, "
+            f"wake_sensitivity={settings.WAKE_WORD_SENSITIVITY}, whisper={settings.WHISPER_MODEL})"
+        )
 
-        def _build_recognizer(sample_rate: int):
-            return vosk.KaldiRecognizer(model, sample_rate)
+        def _on_wakeword_detected():
+            self._set_state("LISTENING")
 
-        # --- Open microphone via sounddevice (with sample-rate fallback) ---
-        def _open_stream(sample_rate: int):
-            return sd.RawInputStream(
-                samplerate=sample_rate,
-                blocksize=BLOCK_SIZE,
-                dtype="int16",
-                channels=1,
-                callback=self._audio_callback,
+        # Create the recorder once; we will repeatedly call wait_audio() for each utterance.
+        try:
+            recorder = AudioToTextRecorder(
+                # RealtimeSTT will still initialize its internal faster-whisper
+                # pipeline in a worker process, even though we do final STT
+                # using mlx-whisper. Keep it small to minimize startup time.
+                model="tiny",
+                download_root=None,
+                language="en",
+                compute_type="default",
+                use_microphone=True,
+                spinner=False,
+                wakeword_backend="pvporcupine",
+                wake_words=settings.WAKE_WORDS,
+                wake_words_sensitivity=settings.WAKE_WORD_SENSITIVITY,
+                wake_word_timeout=settings.WAKE_WORD_TIMEOUT,
+                silero_sensitivity=settings.SILERO_SENSITIVITY,
+                webrtc_sensitivity=settings.WEBRTC_SENSITIVITY,
+                post_speech_silence_duration=settings.POST_SPEECH_SILENCE_DURATION,
+                silero_deactivity_detection=True,
+                on_wakeword_detected=_on_wakeword_detected,
+                enable_realtime_transcription=False,
+                level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
             )
-
-        stream = None
-        try:
-            tried_rates: list[int] = [TARGET_SAMPLE_RATE, 48000, 44100]
-            for r in tried_rates:
-                try:
-                    stream = _open_stream(r)
-                    stream.__enter__()
-                    self._stream_sample_rate = r
-                    break
-                except Exception as e:
-                    logger.warning(f"Failed to open microphone at {r} Hz: {e}")
-                    stream = None
-
-            if stream is None:
-                raise RuntimeError("Failed to open microphone at any supported sample rate")
-
-            recognizer = _build_recognizer(TARGET_SAMPLE_RATE)
-            if self._stream_sample_rate != TARGET_SAMPLE_RATE:
-                self._resampler = self._make_resampler(self._stream_sample_rate, TARGET_SAMPLE_RATE)
-
-            logger.info("Microphone listening — say 'Hey Clarity' or press Space (testing)")
-            while self._running:
-                # Check for space bar / UI trigger (skip wake word)
-                try:
-                    self._trigger_queue.get_nowait()
-                    logger.info("Trigger (space bar) — listening for command")
-                    self._set_state("LISTENING")
-                    command = self._capture_command(recognizer)
-                    if command:
-                        self._process_command(command, raw_text=command)
-                    else:
-                        logger.info("No command heard, returning to idle")
-                        self._set_state("IDLE")
-                    continue
-                except queue.Empty:
-                    pass
-                self._listen_for_wake(recognizer)
         except Exception as e:
-            logger.error(f"Failed to open microphone: {e}")
+            logger.error(f"Failed to initialize RealtimeSTT recorder: {e}")
             return
-        finally:
+
+        with self._recorder_lock:
+            self._recorder = recorder
+
+        logger.info("Microphone listening — say wake word or use UI trigger (space bar).")
+
+        try:
+            # If a manual trigger arrived before initialization finished, honor it.
             try:
-                if stream is not None:
-                    stream.__exit__(None, None, None)
-            except Exception:
+                while True:
+                    self._trigger_queue.get_nowait()
+                    recorder.start()
+                    self._set_state("LISTENING")
+            except queue.Empty:
                 pass
 
-        logger.info("Microphone closed")
+            while self._running:
+                # Blocking: wait until VAD ends the current utterance and audio is available.
+                recorder.wait_audio()
 
-    def _make_resampler(self, src_rate: int, dst_rate: int):
-        """
-        Build a lightweight resampler to 16kHz for Vosk.
-        Prefer `samplerate` (fast, high-quality). If unavailable, fall back to `audioop`.
-        """
-        try:
-            import numpy as np  # type: ignore
-            import samplerate  # type: ignore
-
-            converter = samplerate.Resampler(converter_type="sinc_fastest", channels=1)
-            ratio = float(dst_rate) / float(src_rate)
-
-            def _resample(pcm16_bytes: bytes) -> bytes:
-                x = np.frombuffer(pcm16_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-                y = converter.process(x, ratio, end_of_input=False)
-                y = (y * 32768.0).clip(-32768, 32767).astype(np.int16)
-                return y.tobytes()
-
-            logger.info(f"Resampling mic audio {src_rate} -> {dst_rate} using samplerate")
-            return _resample
-        except Exception:
-            import audioop
-
-            def _resample(pcm16_bytes: bytes) -> bytes:
-                out, _ = audioop.ratecv(pcm16_bytes, 2, 1, src_rate, dst_rate, None)
-                return out
-
-            logger.info(f"Resampling mic audio {src_rate} -> {dst_rate} using audioop")
-            return _resample
-
-    def _read_audio_block(self, timeout: float = 0.5) -> Optional[bytes]:
-        """Read one audio block from the queue (non-blocking with timeout)."""
-        try:
-            data = self._audio_queue.get(timeout=timeout)
-            if self._resampler is not None:
-                try:
-                    return self._resampler(data)
-                except Exception:
-                    return data
-            return data
-        except queue.Empty:
-            return None
-
-    def _listen_for_wake(self, recognizer):
-        """Block until wake word is detected, then capture + process command."""
-        data = self._read_audio_block()
-        if data is None or not self._running:
-            return
-
-        if recognizer.AcceptWaveform(data):
-            result = json.loads(recognizer.Result())
-            text = result.get("text", "")
-            if not text:
-                return
-
-            found, after = _find_wake_word(text)
-            if not found:
-                return
-
-            logger.info(f"Wake word detected! After wake: '{after}'")
-
-            if after:
-                # Wake word + command in the same utterance
-                self._process_command(after, raw_text=text)
-            else:
-                # Wake word only — listen for the command
-                self._set_state("LISTENING")
-                logger.info("Listening for command...")
-                command = self._capture_command(recognizer)
-                if command:
-                    self._process_command(command, raw_text=command)
-                else:
-                    logger.info("No command heard, returning to idle")
+                audio_float = getattr(recorder, "audio", None)
+                if audio_float is None:
                     self._set_state("IDLE")
-        else:
-            # Check partial results for wake word too (faster detection)
-            partial = json.loads(recognizer.PartialResult())
-            partial_text = partial.get("partial", "")
-            if partial_text:
-                found, after = _find_wake_word(partial_text)
-                if found and not after:
-                    # Wake heard in partial — wait for final result
+                    continue
+
+                # RealtimeSTT stores captured audio as float in [-1, 1].
+                import numpy as np  # type: ignore
+
+                pcm16 = np.clip(
+                    np.asarray(audio_float, dtype=np.float32) * 32767.0, -32768.0, 32767.0
+                ).astype(np.int16)
+                sample_rate = int(getattr(recorder, "sample_rate", 16000))
+
+                command = self._process_captured_audio(pcm16, sample_rate)
+                if not command:
+                    self._set_state("IDLE")
+                    continue
+
+                self._process_command(command, raw_text=command)
+        except Exception as e:
+            logger.error(f"Voice listener loop failed: {e}")
+        finally:
+            with self._recorder_lock:
+                try:
+                    if self._recorder is not None:
+                        self._recorder.shutdown()
+                except Exception:
                     pass
-
-    def _capture_command(self, recognizer) -> Optional[str]:
-        """After wake word, listen for up to COMMAND_TIMEOUT seconds for a command."""
-        start = time.time()
-        last_speech_time = time.time()
-
-        while self._running and (time.time() - start) < COMMAND_TIMEOUT:
-            data = self._read_audio_block()
-            if data is None:
-                continue
-
-            if recognizer.AcceptWaveform(data):
-                result = json.loads(recognizer.Result())
-                text = result.get("text", "").strip()
-                if text:
-                    # Strip any repeated wake word from the command
-                    _, cleaned = _find_wake_word(text)
-                    return cleaned if cleaned else text
-            else:
-                partial = json.loads(recognizer.PartialResult())
-                if partial.get("partial", "").strip():
-                    last_speech_time = time.time()
-
-            # If silence for too long after some speech, stop
-            if (time.time() - last_speech_time) > SILENCE_TIMEOUT and (time.time() - start) > 2.0:
-                # No speech for a while — check final
-                result = json.loads(recognizer.FinalResult())
-                text = result.get("text", "").strip()
-                if text:
-                    _, cleaned = _find_wake_word(text)
-                    return cleaned if cleaned else text
-                return None
-
-        # Timeout — grab whatever is there
-        result = json.loads(recognizer.FinalResult())
-        text = result.get("text", "").strip()
-        if text:
-            _, cleaned = _find_wake_word(text)
-            return cleaned if cleaned else text
-        return None
+            logger.info("Voice listener stopped.")
 
     def _process_command(self, command: str, raw_text: Optional[str] = None):
         """Send command through the voice orchestrator and speak the response."""
@@ -445,9 +339,7 @@ class VoiceListener:
             )
 
             # Run the async orchestrator function from this sync thread
-            future = asyncio.run_coroutine_threadsafe(
-                process_voice_intent(request), self._loop
-            )
+            future = asyncio.run_coroutine_threadsafe(process_voice_intent(request), self._loop)
             response = future.result(timeout=30)
 
             assistant_msg = response.assistant_message
@@ -456,10 +348,10 @@ class VoiceListener:
             if assistant_msg:
                 self._set_state("SPEAKING", assistant_msg, transcript=transcript)
                 _speak(assistant_msg)
-
         except Exception as e:
             logger.error(f"Command processing failed: {e}")
             self._set_state("SPEAKING", "Sorry, I had trouble with that.", transcript=transcript)
             _speak("Sorry, I had trouble with that.")
 
         self._set_state("IDLE")
+

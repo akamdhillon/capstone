@@ -8,6 +8,15 @@
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+set +H  # avoid history expansion issues when sourcing .env with '!' chars
+
+if [ -f "$ROOT_DIR/.env" ]; then
+  # Export .env so start_all can use OLLAMA_MODEL / OLLAMA_HOST
+  set -a
+  . "$ROOT_DIR/.env"
+  set +a
+fi
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
@@ -66,6 +75,27 @@ echo "        Clarity+ — Full System Start"
 echo -e "==========================================${NC}"
 echo ""
 
+# ── 0. Ollama (LLM) ─────────────────────────────────────────────────────
+echo -e "${CYAN}[0/4] Ollama (port 11434)${NC}"
+if ! command -v ollama >/dev/null 2>&1; then
+    echo -e "  ${RED}✗${NC} Ollama is not installed (needed for voice + LLM)"
+    echo -e "  Install: https://ollama.com/download"
+    exit 1
+fi
+
+if ! lsof -i :11434 -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "  Starting Ollama server..."
+    ollama serve > "$ROOT_DIR/ollama.log" 2>&1 &
+    PIDS+=($!)
+fi
+
+wait_for_port 11434 "Ollama" || exit 1
+
+if [ -n "${OLLAMA_MODEL:-}" ]; then
+    echo "  Pulling model: ${OLLAMA_MODEL} (first run may take a while)..."
+    ollama pull "${OLLAMA_MODEL}" || exit 1
+fi
+
 # ── 1. Backend (port 8000) ────────────────────────────────────────────
 echo -e "${CYAN}[1/3] Backend (port 8000)${NC}"
 
@@ -97,6 +127,9 @@ PIDS+=($!)
 
 wait_for_port 8000 "Backend"
 BACKEND_OK=$?
+if [ "$BACKEND_OK" -ne 0 ]; then
+    exit 1
+fi
 deactivate 2>/dev/null
 
 # ── 2. Local ML Services (ports 8001-8005) ────────────────────────────
@@ -145,6 +178,11 @@ wait_for_port 8004 "Posture service"
 wait_for_port 8005 "Eyes service"
 [ $? -ne 0 ] && JETSON_OK=1
 
+if [ $JETSON_OK -ne 0 ]; then
+    echo -e "${RED}  One or more services failed to start.${NC}"
+    exit 1
+fi
+
 echo "  Starting orchestrator..."
 python3 main.py &
 PIDS+=($!)
@@ -152,6 +190,11 @@ PIDS+=($!)
 wait_for_port 8001 "Orchestrator"
 [ $? -ne 0 ] && JETSON_OK=1
 deactivate 2>/dev/null
+
+if [ $JETSON_OK -ne 0 ]; then
+    echo -e "${RED}  Orchestrator failed to start.${NC}"
+    exit 1
+fi
 
 # ── 3. Frontend (port 3000) ───────────────────────────────────────────
 echo ""

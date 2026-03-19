@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel
 import logging
 import os
@@ -10,7 +10,6 @@ logger = logging.getLogger("service.skin")
 
 # Load the acne model once at startup
 _inference_system = None
-_inference_error: str | None = None
 _MODEL_PATH = Path(__file__).parent / "checkpoints" / "best_model.pth"
 
 def _is_lfs_pointer(path: Path) -> bool:
@@ -23,27 +22,24 @@ def _is_lfs_pointer(path: Path) -> bool:
         return False
 
 def _load_model():
-    global _inference_system, _inference_error
+    global _inference_system
+    if not _MODEL_PATH.exists():
+        raise SystemExit(
+            f"Skin model not found at {_MODEL_PATH}. Run 'git lfs pull' to download the checkpoint."
+        )
+    if _is_lfs_pointer(_MODEL_PATH):
+        raise SystemExit(
+            "Skin model file is a Git LFS pointer, not actual weights. "
+            "Run 'git lfs pull' to download the checkpoint. See README Prerequisites."
+        )
     try:
-        if not _MODEL_PATH.exists():
-            raise FileNotFoundError(
-                f"Skin model not found at {_MODEL_PATH}. Run 'git lfs pull' to download the checkpoint."
-            )
-        if _is_lfs_pointer(_MODEL_PATH):
-            raise RuntimeError(
-                "Skin model file is a Git LFS pointer, not actual weights. Run 'git lfs pull' to download."
-            )
-
         from inference import AcneInferenceSystem
 
         logger.info(f"Loading acne model from {_MODEL_PATH}")
         _inference_system = AcneInferenceSystem(str(_MODEL_PATH))
-        _inference_error = None
         logger.info("Acne model loaded successfully")
     except Exception as e:
-        _inference_system = None
-        _inference_error = str(e)
-        logger.error(f"Skin service running in degraded mode: {e}")
+        raise SystemExit(f"Failed to load acne model: {e}") from e
 
 _load_model()
 
@@ -53,8 +49,7 @@ async def health():
     return {
         "status": "ok",
         "service": "skin",
-        "available": _inference_system is not None,
-        "error": _inference_error,
+        "model_loaded": _inference_system is not None,
     }
 
 
@@ -93,9 +88,6 @@ def _run_expanded_pipeline(image_path: str) -> dict | None:
 @app.post("/analyze")
 async def analyze(request: AnalysisRequest):
     logger.info(f"Analyzing skin for: {request.image_path}")
-
-    if _inference_system is None:
-        raise HTTPException(status_code=503, detail=_inference_error or "skin_model_unavailable")
 
     try:
         from PIL import Image

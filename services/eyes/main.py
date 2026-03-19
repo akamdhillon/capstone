@@ -25,7 +25,6 @@ logger = logging.getLogger("service.eyes")
 
 # Load analyzer at startup
 _analyzer = None
-_analyzer_error: str | None = None
 _stream_sessions: dict[str, "BlinkTracker"] = {}
 # Session data for stream-by-frame mode: session_id -> { tracker, ear_list, redness_list, puffiness_list }
 _stream_session_data: dict[str, dict] = {}
@@ -33,17 +32,11 @@ _stream_session_lock = threading.Lock()
 
 
 def _load_analyzer():
-    global _analyzer, _analyzer_error
-    try:
-        from inference import EyeStrainAnalyzer
+    global _analyzer
+    from inference import EyeStrainAnalyzer
 
-        # Use False so one instance works for both image and stream
-        _analyzer = EyeStrainAnalyzer(static_image_mode=False)
-        _analyzer_error = None
-    except Exception as e:
-        _analyzer = None
-        _analyzer_error = str(e)
-        logger.error(f"Eyes service running in degraded mode: {e}")
+    # Use False so one instance works for both image and stream
+    _analyzer = EyeStrainAnalyzer(static_image_mode=False)
 
 
 _load_analyzer()
@@ -62,8 +55,7 @@ async def health():
     return {
         "status": "ok",
         "service": "eyes",
-        "available": _analyzer is not None,
-        "error": _analyzer_error,
+        "model_loaded": _analyzer is not None,
     }
 
 
@@ -118,9 +110,6 @@ async def analyze_stream_frame(request: StreamFrameRequest):
         return {"ok": False, "error": "invalid_image"}
     if frame is None:
         return {"ok": False, "error": "invalid_image"}
-
-    if _analyzer is None:
-        raise HTTPException(status_code=503, detail=_analyzer_error or "eyes_analyzer_unavailable")
 
     result = _analyzer.analyze_frame(frame, blink_rate=None)
     if result is None:
@@ -193,9 +182,6 @@ async def analyze(request: AnalysisRequest):
     """Single image mode: EAR, sclera redness, puffiness. blink_rate=null."""
     logger.info(f"Analyzing eyes for: {request.image_path}")
 
-    if _analyzer is None:
-        raise HTTPException(status_code=503, detail=_analyzer_error or "eyes_analyzer_unavailable")
-
     path = Path(request.image_path)
     if not path.exists():
         return {"service": "eyes", "error": "image_not_found", "score": None}
@@ -238,9 +224,6 @@ async def analyze_stream(request: StreamRequest = None):
     if session_id not in _stream_sessions:
         _stream_sessions[session_id] = BlinkTracker()
     tracker = _stream_sessions[session_id]
-
-    if _analyzer is None:
-        raise HTTPException(status_code=503, detail=_analyzer_error or "eyes_analyzer_unavailable")
 
     cap = cv2.VideoCapture(source)
     if not cap.isOpened():

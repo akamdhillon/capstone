@@ -1,8 +1,0 @@
-pvporcupine
-pvrecorder
-openai-whisper
-pygame
-elevenlabs
-httpx
-python-dotenv
-opencv-python

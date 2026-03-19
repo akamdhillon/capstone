@@ -149,6 +149,19 @@ async def lifespan(app):
 
 app = FastAPI(title="Clarity+ Orchestrator", lifespan=lifespan)
 
+
+@app.get("/health")
+async def health():
+    """
+    Health endpoint used by the backend to verify local service connectivity.
+    """
+    return {
+        "status": "ok",
+        "service": "orchestrator",
+        "camera_running": bool(getattr(camera, "_running", False)),
+        "snapshot_dir": SNAPSHOT_DIR,
+    }
+
 class AnalyzePayload(BaseModel):
     image: Optional[str] = None  # base64-encoded JPEG from frontend
 

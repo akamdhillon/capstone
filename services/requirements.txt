@@ -1,8 +1,9 @@
 fastapi
 uvicorn
-python-multipart
 requests
-numpy
+# Torch/torchvision/timm wheels in this repo have NumPy-1.x compiled extensions.
+# Pin NumPy to avoid "compiled using NumPy 1.x cannot be run in NumPy 2.x" runtime errors.
+numpy==1.26.4
 opencv-python-headless
 python-dotenv
 torch

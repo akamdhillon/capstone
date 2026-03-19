@@ -23,12 +23,7 @@ from pydantic import BaseModel
 logging.getLogger("onnxruntime").setLevel(logging.WARNING)
 logging.getLogger("insightface").setLevel(logging.WARNING)
 
-_face_import_error: str | None = None
-try:
-    from insightface.app import FaceAnalysis  # type: ignore  # noqa: E402
-except Exception as e:  # pragma: no cover
-    FaceAnalysis = None  # type: ignore[misc,assignment]
-    _face_import_error = str(e)
+from insightface.app import FaceAnalysis  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -39,14 +34,12 @@ logger = logging.getLogger("service.face")
 # ---------------------------------------------------------------------------
 # Global model reference (loaded once at startup)
 # ---------------------------------------------------------------------------
-face_app: Optional["FaceAnalysis"] = None
+face_app: Optional[FaceAnalysis] = None
 
 
 def _load_models():
     """Load InsightFace models once at boot."""
     global face_app
-    if FaceAnalysis is None:
-        raise RuntimeError(f"insightface unavailable: {_face_import_error}")
     logger.info("Loading InsightFace models (buffalo_l) …")
     t0 = time.time()
 
@@ -62,10 +55,7 @@ def _load_models():
 
 @asynccontextmanager
 async def lifespan(app):
-    try:
-        _load_models()
-    except Exception as e:
-        logger.error(f"Face service running in degraded mode: {e}")
+    _load_models()
     yield
 
 
@@ -110,8 +100,7 @@ async def health():
     return {
         "status": "ok",
         "service": "face",
-        "available": face_app is not None,
-        "error": None if face_app is not None else (_face_import_error or "model_not_loaded"),
+        "model_loaded": face_app is not None,
     }
 
 
@@ -137,11 +126,6 @@ def _detect_single(img: np.ndarray) -> dict:
     Run detection on *img* and return the highest-confidence face.
     Returns dict with keys: face, bbox, landmarks  (or None if no faces).
     """
-    if face_app is None:
-        raise HTTPException(
-            status_code=503,
-            detail=_face_import_error or "Face model not loaded (missing dependency or startup failure)",
-        )
     faces = face_app.get(img) or []
     if not faces:
         logger.warning("InsightFace get() returned no faces for this image.")
@@ -362,12 +346,6 @@ async def analyze(request: AnalysisRequest):
     logger.info(f"Analyzing face for: {request.image_path}")
 
     try:
-        if face_app is None:
-            raise HTTPException(
-                status_code=503,
-                detail=_face_import_error or "Face model not loaded (missing dependency or startup failure)",
-            )
-
         img = cv2.imread(request.image_path)
         if img is None:
             return {"service": "face", "faces_detected": 0, "identity": "Unknown"}

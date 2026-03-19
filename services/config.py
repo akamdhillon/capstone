@@ -8,22 +8,12 @@ env_path = Path(__file__).resolve().parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
 class Settings:
-    # Deployment Target
-    JETSON_TARGET = os.getenv("JETSON_TARGET")
-
-    # Network
-    JETSON_IP = os.getenv("JETSON_IP")
-    RPI_IP = os.getenv("RPI_IP")
-    
-    # Camera defaults (can be overridden by env if needed, but keeping simple for now)
+    # Camera defaults (used by services/main camera manager)
     CAMERA_RESOLUTION_WIDTH = 1920
     CAMERA_RESOLUTION_HEIGHT = 1080
     CAMERA_FPS = 30
     MAC_CAMERA_INDEX = int(os.getenv("MAC_CAMERA_INDEX", "0"))
     CAMERA_DEVICE_PRIMARY = 0
-    USE_GSTREAMER = False
-    DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
-    DEV_VIDEO_PATH = "video.mp4"
 
 settings = Settings()
 is_mac = os.uname().sysname == "Darwin"
