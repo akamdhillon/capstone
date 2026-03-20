@@ -186,15 +186,19 @@ class VoiceListener:
         if not MODEL_DIR.exists():
             logger.info("Vosk model not found. Downloading small English model...")
             try:
-                import urllib.request
                 import zipfile
                 import tempfile
+
+                import httpx
 
                 model_url = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
                 with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
                     tmp_path = tmp.name
                     logger.info(f"Downloading {model_url} ...")
-                    urllib.request.urlretrieve(model_url, tmp_path)
+                    with httpx.Client(timeout=300.0, follow_redirects=True) as client:
+                        resp = client.get(model_url)
+                        resp.raise_for_status()
+                        Path(tmp_path).write_bytes(resp.content)
 
                 logger.info("Extracting model...")
                 with zipfile.ZipFile(tmp_path, "r") as zf:

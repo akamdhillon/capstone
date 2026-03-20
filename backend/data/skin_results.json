@@ -544,5 +544,122 @@
     "recommendation": "Your skin appears clear. Maintain good skincare routine.",
     "status": "good",
     "timestamp": "2026-03-13T16:38:40.177127"
+  },
+  {
+    "score": 87.0,
+    "details": {
+      "acne": {
+        "classification": "Other",
+        "severity_score": 1.4,
+        "confidence": 67.9,
+        "score": 86
+      },
+      "redness": {
+        "score": 65
+      },
+      "oiliness": {
+        "score": 100
+      },
+      "skin_tone": {
+        "L": 64.6,
+        "a": 128.5,
+        "b": 136.0,
+        "score": 99
+      },
+      "pores": {
+        "score": 98
+      },
+      "dark_spots": {
+        "score": 99
+      },
+      "wrinkles": {
+        "score": 99
+      },
+      "eye_bags": {
+        "score": 99
+      }
+    },
+    "user_id": "unknown",
+    "recommendation": "Your skin appears clear. Maintain good skincare routine.",
+    "status": "good",
+    "timestamp": "2026-03-20T01:49:25.963154"
+  },
+  {
+    "score": 66.0,
+    "details": {
+      "acne": {
+        "classification": "Other",
+        "severity_score": 2.7,
+        "confidence": 51.5,
+        "score": 73
+      },
+      "redness": {
+        "score": 66
+      },
+      "oiliness": {
+        "score": 31
+      },
+      "skin_tone": {
+        "L": 129.3,
+        "a": 126.6,
+        "b": 135.3,
+        "score": 99
+      },
+      "pores": {
+        "score": 85
+      },
+      "dark_spots": {
+        "score": 99
+      },
+      "wrinkles": {
+        "score": 99
+      },
+      "eye_bags": {
+        "score": 99
+      }
+    },
+    "user_id": "unknown",
+    "recommendation": "Mild acne detected. Over-the-counter treatments may be effective. Consider consulting a dermatologist if it persists.",
+    "status": "moderate",
+    "timestamp": "2026-03-20T01:50:04.552648"
+  },
+  {
+    "score": 71.0,
+    "details": {
+      "acne": {
+        "classification": "Other",
+        "severity_score": 0.7,
+        "confidence": 74.4,
+        "score": 93
+      },
+      "redness": {
+        "score": 56
+      },
+      "oiliness": {
+        "score": 0
+      },
+      "skin_tone": {
+        "L": 239.5,
+        "a": 135.6,
+        "b": 124.4,
+        "score": 99
+      },
+      "pores": {
+        "score": 98
+      },
+      "dark_spots": {
+        "score": 99
+      },
+      "wrinkles": {
+        "score": 99
+      },
+      "eye_bags": {
+        "score": 99
+      }
+    },
+    "user_id": "unknown",
+    "recommendation": "Your skin appears clear. Maintain good skincare routine.",
+    "status": "moderate",
+    "timestamp": "2026-03-20T01:50:22.137104"
   }
 ]

@@ -404,5 +404,37 @@
     },
     "user_id": "aedc4859-44e4-4f54-b28a-6a4d31d95b9a",
     "timestamp": "2026-03-09T15:51:26.212761"
+  },
+  {
+    "score": 72.0,
+    "details": {
+      "ear": 0.3151,
+      "eye_openness": "Open",
+      "sclera_redness": 0.02,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "None",
+      "frames_analyzed": 34,
+      "duration_seconds": 5.0
+    },
+    "user_id": "unknown",
+    "timestamp": "2026-03-20T01:48:21.856057"
+  },
+  {
+    "score": 72.0,
+    "details": {
+      "ear": 0.3151,
+      "eye_openness": "Open",
+      "sclera_redness": 0.02,
+      "puffiness": "High",
+      "blink_rate": null,
+      "blink_rate_status": null,
+      "drowsiness": "None",
+      "frames_analyzed": 34,
+      "duration_seconds": 5
+    },
+    "user_id": null,
+    "timestamp": "2026-03-20T01:48:21.998091"
   }
 ]

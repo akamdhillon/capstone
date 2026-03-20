@@ -12,7 +12,7 @@ import os
 import time
 import math
 import logging
-import urllib.request
+import requests
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from collections import deque
@@ -55,7 +55,9 @@ def _ensure_model():
     if _MODEL_PATH.exists():
         return str(_MODEL_PATH)
     logger.info(f"Downloading pose landmarker model to {_MODEL_PATH}...")
-    urllib.request.urlretrieve(_MODEL_URL, _MODEL_PATH)
+    r = requests.get(_MODEL_URL, timeout=120)
+    r.raise_for_status()
+    _MODEL_PATH.write_bytes(r.content)
     logger.info("Model downloaded.")
     return str(_MODEL_PATH)
 
